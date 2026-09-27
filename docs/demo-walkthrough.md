@@ -10,8 +10,11 @@ Upload a short source document. Show OCR/source artifacts and generation progres
 starting structure, base Qwen, and trained Qwen. Explain the eight-turn tool budget
 and geometry/connectivity rewards. Show 3/20 → 7/20 successful repairs (+20pp)
 and 36.7% → 71.1% mean target overlap after fifty batches. Use the displayed completed holdout scores;
-partial results remain labeled as such. The gallery opens on the fixed first held-out case. Use its selector to inspect
-all twenty cases in dataset order, including unchanged repairs and failures. For a visible example, select Case 10 (089): the base model leaves the upright missing, while the trained model completes it. This is one of the four new successes; the headline score still includes all twenty cases.
+partial results remain labeled as such. The gallery opens on the first newly solved case, labeled “Newly solved example.”
+For this run that is Case 10 (089): the base model leaves the upright missing,
+while the trained model completes it. This is one of four new successes. The
+headline score includes all twenty cases, and the selector retains dataset order
+so unchanged repairs and failures remain equally accessible.
 
 **1:05–1:45 — Learning and verification.** Show Math’s 2/20 → 5/20 result after
 80 updates on Qwen 2.5 7B. Explain its ten exact-answer questions and ten

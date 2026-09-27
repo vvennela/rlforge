@@ -101,7 +101,8 @@ $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!sele
 function drawBridge(){
  if(!renderer||!bridgeState||page!=='engineering')return;
  const samples=evidence.engineering?.samples||[evidence.engineering?.sample].filter(Boolean);
- const sample=samples.find(s=>s.id===bridgeSelection)||samples[0];
+ const featured=samples.find(s=>s.after?.success&&!s.before.success);
+ const sample=samples.find(s=>s.id===bridgeSelection)||featured||samples[0];
  const selector=$('bridge-case');
  if(document.activeElement!==selector){
   selector.replaceChildren(...samples.map((s,i)=>new Option(`Case ${i+1} · ${s.id.split('-').pop()} · ${s.after?(s.before.success?'pass':'fail')+' → '+(s.after.success?'pass':'fail'):'evaluation pending'}`,s.id)));
@@ -110,7 +111,7 @@ function drawBridge(){
  $('bridge-case-control').hidden=samples.length<2;
  if(sample){
   const scene=phase=>({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample[phase]?.editable_bricks||[])]});
-  $('bridge-sample-label').textContent='HELD-OUT REPAIR / '+sample.id;
+  $('bridge-sample-label').textContent=(sample===featured?'NEWLY SOLVED EXAMPLE / ':'HELD-OUT REPAIR / ')+sample.id;
   $('bridge-initial-panel').hidden=false;
   initialRenderer?.render({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample.initial_editable||[])]},camera);
   $('bridge-before-label').textContent=`Base Qwen · ${(100*sample.before.gap_iou).toFixed(1)}% target overlap`;
