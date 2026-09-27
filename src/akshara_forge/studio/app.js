@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,initialRenderer=null,pointer=null;
+let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,initialRenderer=null,pointer=null,bridgeSelection=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
 const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Qwen writes Python implementations of iterative-deepening search. Each program runs against hidden tests in a Vultr sandbox, checking paths, costs, thresholds, traversal order, and edge cases.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
@@ -21,7 +21,7 @@ function renderCase(){
  $('run-detail').textContent=active==='engineering'?`${s.steps||0} / ${s.target_steps||50} training batches · ${s.reward_updates||0} batches with reward contrast`:active==='math'?'80 training updates · Qwen 2.5 7B · same frozen completion parser':`${s.steps||0} / ${s.target_steps||80} training batches · four sampled programs per batch · Qwen 2.5 7B`;
  const metric=active==='engineering'?'mean_gap_iou':'mean_reward';
  const metricName=active==='engineering'?'target geometry overlap':'test pass rate';
- if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%':'awaiting evaluation'}`}
+ if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(s.weight_update?.changed_parameters){$('run-detail').textContent+=` · ${s.weight_update.changed_parameters.toLocaleString()} adapter parameters changed`}
  const codeSample=s.sample;
  $('program-comparison').hidden=active!=='coding'||!codeSample;
@@ -55,10 +55,17 @@ function jobView(s){$('job').hidden=false;const titles={extracting:'Reading your
 $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);jobView(s);while(['extracting','ocr','artifacts','generating','reviewing'].includes(s.status)){await new Promise(r=>setTimeout(r,1500));const poll=await fetch('/api/generation/'+s.id);if(!poll.ok)throw Error('Generation status unavailable');s=await poll.json();jobView(s)}}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
 function drawBridge(){
  if(!renderer||!bridgeState||page!=='engineering')return;
- const sample=evidence.engineering?.sample;
+ const samples=evidence.engineering?.samples||[evidence.engineering?.sample].filter(Boolean);
+ const sample=samples.find(s=>s.id===bridgeSelection)||samples[0];
+ const selector=$('bridge-case');
+ if(document.activeElement!==selector){
+  selector.replaceChildren(...samples.map((s,i)=>new Option(`Case ${i+1} · ${s.id.split('-').pop()} · ${s.after?(s.before.success?'pass':'fail')+' → '+(s.after.success?'pass':'fail'):'evaluation pending'}`,s.id)));
+  if(sample)selector.value=sample.id;
+ }
+ $('bridge-case-control').hidden=samples.length<2;
  if(sample){
   const scene=phase=>({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample[phase]?.editable_bricks||[])]});
-  $('bridge-sample-label').textContent='FIXED HELD-OUT EXAMPLE / '+sample.id;
+  $('bridge-sample-label').textContent='HELD-OUT REPAIR / '+sample.id;
   $('bridge-initial-panel').hidden=false;
   initialRenderer?.render({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample.initial_editable||[])]},camera);
   $('bridge-before-label').textContent=`Base Qwen · ${(100*sample.before.gap_iou).toFixed(1)}% target overlap`;
@@ -83,6 +90,7 @@ $('bridge-initial').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x
 $('bridge-initial').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
 for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-initial').addEventListener(n,()=>pointer=null);
 $('bridge-initial').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
+$('bridge-case').addEventListener('change',e=>{bridgeSelection=e.target.value;drawBridge()});
 $('reset-view').onclick=()=>{Object.assign(camera,{yaw:-.65,pitch:.55,zoom:1});drawBridge()};window.addEventListener('resize',drawBridge);
 refresh();initBridge();tex();setInterval(refresh,15000);
 

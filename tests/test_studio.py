@@ -94,3 +94,23 @@ def test_vultr_json_continuation_reassembles_only_new_output(tmp_path,monkeypatc
         return httpx.Response(200,json={'model':'chosen','choices':[{'finish_reason':'stop','message':{'content':'{"id":"one"}]}'} }]})
     with httpx.Client(transport=httpx.MockTransport(transport)) as c:
         assert g.call_model('source',tmp_path,c,json_prefix=True)=={'problems':[{'id':'one'}]}
+
+
+def test_bridge_gallery_pairs_by_identity_and_keeps_frozen_order(tmp_path):
+    from akshara_forge.studio.evidence import engineering_samples
+    dataset=tmp_path/'runs/engineering-interactive/dataset-v1'
+    dataset.mkdir(parents=True)
+    rows=[{'id':f'case-{i}','task':{},'target':{},'initial':[]} for i in range(3)]
+    (dataset/'heldout.json').write_text(json.dumps(rows))
+    run=tmp_path/'run'
+    for phase,ids in [('before',[2,0,1]),('after',[1,0])]:
+        dest=run/phase;dest.mkdir(parents=True)
+        (dest/'traces.jsonl').write_text('\n'.join(json.dumps({'id':f'case-{i}','state':{'observation':{'case':i,'phase':phase}}}) for i in ids))
+    samples=engineering_samples(tmp_path,run)
+    assert [s['id'] for s in samples]==['case-0','case-1','case-2']
+    assert samples[0]['before']['case']==samples[0]['after']['case']==0
+    assert samples[2]['after'] is None
+    with (run/'after/traces.jsonl').open('a') as f:
+        f.write('\n'+json.dumps({'id':'unknown','state':{'observation':{}}}))
+    with pytest.raises(ValueError,match='identity mismatch'):
+        engineering_samples(tmp_path,run)
