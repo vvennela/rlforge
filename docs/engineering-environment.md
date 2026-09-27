@@ -62,3 +62,25 @@ AKSHARA_TEST_DOCKER=1 PYTHONPATH=src python -m pytest tests/engineering -q
 ```
 
 Tests cover reference feasibility, overlap, empty submissions, sparse bounding-box gaming, wrong pier placement, disconnected side contact, extra geometry, invalid and atomic actions, and the real Docker boundary. The browser demo is manually checked separately.
+
+## v1: source-derived height and component comparison
+
+The v0 description and smoke scores above are historical. v1 is a different, hashed specification; do not compare rewards across the two versions as learning.
+
+The current viewer supports unrestricted horizontal and vertical orbit, underside/top/side presets, wheel zoom and shift/right-drag pan. The camera uses physical stud/plate aspect ratios (one plate height = 0.4 studs).
+
+The source south elevation explicitly gives deck top 3′5½″ (41.5 in), tallest pole top 8′10½″ (106.5 in), and local ground 1′11″. At 12 source inches per stud, one plate corresponds to 4.8 source inches. Rounding absolute heights yields deck top 9 plates and tallest pole top 22 plates. The deck starts at 7 plates with two layers. These replace v0's arbitrary vertical placement.
+
+The shorter pole is not dimensioned. A separate crop annotation estimates its top as 87.33 in by calibrating the continuous above-deck region between printed datums; the chosen modeling tolerance is ±3 in plus half a plate for rounding. The lower view contains break marks and must not be used to calibrate its full height. Short-post top rounds to 18 plates. Station assignment and paired heights remain assumptions; individual pole dimensions and timber thicknesses have not all been measured. The separate source annotation is in `design-pilot/designs/ak0443/vertical-dimensions.json` beside its crop, outside this code repository.
+
+Seven components are now compared: deck, two lower supports, and four uprights. Geometry is segmented by height zone and connected occupied cells, then matched by minimum total centroid distance. IDs and agent-supplied labels do not establish presence. Each component returns presence, position, absolute size, scale-independent aspect-ratio match and spatial IoU. Printed and estimated vertical datums have separate diagnostics and tolerances. Missing uprights cannot be concealed by correct deck proportions.
+
+The vector is the primary environment output. The optional scalar is a simple reduction over the complete vector with a validity gate; it is an adapter for trainers, not the definition of success. Acceptance requires every declared component. The UI says “Declared components pass” and explicitly lists cross-braces, beam joints, sloped approaches and irregular log details as unmodeled. Solid lower supports remain a coarse proxy. No source evidence establishes wires, so no wire dimensions were invented.
+
+### Proposed first training pilot — not launched
+
+First validate a frozen task generator and establish baseline success on repair and construction separately. Use varied dimensions, missing components and misplaced parts; reserve independently generated validation instances and untouched final test instances before running training. The single archival bridge cannot establish cross-design generalization.
+
+A reasonable initial experiment budget is 100 optimizer updates with four sampled rollouts per training prompt, inspecting validation at 25, 50 and 100 updates. Decide whether to extend to 200 based on validation improvement, not the final test set. This is a proposed budget, not an empirically established convergence estimate. If all sampled completions receive identical rewards, fix task difficulty or initialization before spending more updates. Distinguish tool-action rounds from weight-update steps, and count episodes/completions as well as optimizer updates.
+
+Keep the full component vector in logs. A GRPO adapter can use separately weighted reward functions; trainer-specific aggregation still needs an explicit optimization rule. Freeze it before comparison. Current TRL documentation: https://huggingface.co/docs/trl/grpo_trainer . This change launches no engineering training or cloud resources; the existing AWS stop cap remains unchanged.

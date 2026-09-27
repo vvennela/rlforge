@@ -17,6 +17,7 @@ def main():
   def do_GET(self):
    if not self.allowed():return self.send({'error':'Invalid host'},403)
    if self.path=='/':return self.send(Path(__file__).with_name('demo.html').read_bytes(),ctype='text/html; charset=utf-8')
+   if self.path=='/viewer.js':return self.send(Path(__file__).with_name('viewer.js').read_bytes(),ctype='text/javascript; charset=utf-8')
    if self.path=='/drawing':return self.send(a.drawing.read_bytes(),ctype='image/jpeg')
    if self.path=='/api/state':
     with lock:return self.send({**env.observe(),**state})
@@ -33,13 +34,14 @@ def main():
      if state['busy']:return self.send({'error':'Agent running; wait for it to finish'},409)
      if self.path=='/api/reset':
       mode=req.get('mode','empty')
-      if mode not in ['empty','damaged','reference']:raise ValueError('Unknown fixture')
+      if mode not in ['empty','damaged','reference','missing_uprights']:raise ValueError('Unknown fixture')
       env.close();env=BrickEnvironment(a.runs/'episodes');state.update(mode=mode+' — scripted fixture' if mode!='empty' else 'empty workspace',error=None)
       if mode!='empty':
        bricks=reference()
+       if mode=='missing_uprights':bricks=[b for b in bricks if b['z']<env.task['grid']['deck_z']+2]
        if mode=='damaged':
         for b in bricks:
-         if b['id'] in ['b2','b3']:b['x']-=4
+         if b['id'] in ['b2','b3','b5']:b['x']-=4
        env.step([{'tool':'place','brick':b} for b in bricks],actor='scripted_fixture')
      elif self.path=='/api/step':env.step(req['actions'],actor='manual_ui');state['mode']='manual tool actions'
      elif self.path=='/api/agent':

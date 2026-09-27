@@ -3,6 +3,7 @@ import json
 import sys
 
 PALETTE = {
+ 'brick_1x1': [1,1,3], 'plate_1x1': [1,1,1], 'plate_2x6': [2,6,1],
  'brick_2x2': [2,2,3], 'brick_2x6': [2,6,3],
  'plate_1x2': [1,2,1], 'plate_1x4': [1,4,1],
  'plate_2x2': [2,2,1], 'plate_2x4': [2,4,1], 'plate_2x8': [2,8,1],
