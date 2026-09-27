@@ -14,9 +14,9 @@ Case-study evidence is read from `case-studies.json` in the run directory (overr
 PYTHONPATH=src python -m akshara_forge.studio.evidence --root /path/to/AksharaForge --output /path/to/runs/case-studies.json
 ```
 
-Missing scores remain null. Partial evaluation counts retain their completed denominator and are labeled partial. Deltas appear only after both 20-case evaluations complete. Coding currently has prepared tasks and no recorded before/after training result. The bridge on the landing page is labeled reference geometry; the current training experiment repairs a single upright.
+Missing scores remain null. Partial evaluation counts retain their completed denominator and are labeled partial. Deltas appear only after both 20-case evaluations complete. Coding has a completed 0/20 baseline; the 80-batch run and final paired evaluation supply its next result. The bridge on the landing page is labeled reference geometry; the current training experiment repairs a single upright.
 
-The server binds to loopback and validates Host/Origin. Access the deployed Vultr instance through an SSH tunnel or an authenticated proxy with explicitly configured routing. It is not exposed on a public application port.
+The server binds to loopback and validates Host/Origin. The deployed demo uses a lifecycle-bound NetBird reverse-proxy route with public access, as configured for the presentation; private provider configuration stays blocked at the gateway. It is not exposed on a public application port.
 
 ## Live pipeline verification
 
@@ -25,3 +25,18 @@ passes on Vultr. The downloaded runtime passed all 265 answer probes locally.
 The split-enforced runtime also rejected cross-split reset requests in both modes.
 Raw generation/review responses and the original download remain preserved in
 private run artifacts; no training score is inferred from these compiler checks.
+
+## Generation recovery and provenance
+
+The controller supplies exact source passages with stable IDs. The model selects an
+ID; the controller attaches the original text, character span, and source hash.
+Structured questions receive an explicit output schema before blind review, without
+including reference values.
+
+Malformed model JSON triggers at most two identical-request retries, each with its
+own preserved response. Content checks remain strict. Within each ten-question
+batch, fully reviewed questions are retained while rejected questions are replaced
+over at most five attempts. Accepted questions keep their complete review and
+adversarial probes; original batch audits are included under `private/reviews/`.
+A package is released only when every requested question passes and its exported
+runtime passes the answer probes and train/held-out isolation checks.
