@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,pointer=null;
+let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,pointer=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
 const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Qwen writes Python implementations of iterative-deepening search. Each program runs against sixteen tests in a Vultr sandbox, checking paths, costs, thresholds, traversal order, and edge cases.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
@@ -22,6 +22,15 @@ function renderCase(){
  const metric=active==='engineering'?'mean_gap_iou':'mean_reward';
  const metricName=active==='engineering'?'target geometry overlap':'test pass rate';
  if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%':'awaiting evaluation'}`}
+ const codeSample=s.sample;
+ $('program-comparison').hidden=active!=='coding'||!codeSample;
+ if(active==='coding'&&codeSample){
+  $('program-label').textContent='FIXED HELD-OUT EXAMPLE / '+codeSample.id;
+  for(const phase of ['before','after']){
+   const attempt=codeSample[phase];$('program-'+phase).textContent=attempt?.completion||'Final evaluation follows training.';
+   $('program-'+phase+'-score').textContent=attempt?`${attempt.result.passed}/${attempt.result.total} tests`:'';
+  }
+ }
  if(active==='engineering'){requestAnimationFrame(drawBridge)}
 }
 async function refresh(){try{const r=await fetch('/api/studio');if(!r.ok)throw Error('Status unavailable');const d=await r.json();evidence=d.evidence;const g=d.generation;document.querySelector('.provider-settings').hidden=g.can_configure===false;$('provider-label').textContent=g.provider==='vultr'?'Vultr Serverless Inference':'Astra · server-side inference';$('provider-status').textContent=g.configured?g.model:'Connect inference key';renderCase()}catch(e){$('provider-status').textContent=e.message}}
@@ -43,13 +52,30 @@ for(const name of ['dragleave','drop'])$('dropzone').addEventListener(name,e=>{e
 $('dropzone').addEventListener('drop',e=>{choose(e.dataTransfer.files[0]);$('paper').required=false});
 function jobView(s){$('job').hidden=false;const titles={extracting:'Reading your document',ocr:'Reading scanned pages',artifacts:'Extracting source artifacts',generating:'Generating the environment',ready:'Your environment is ready',failed:'Generation stopped',awaiting_connection:'Document ready'};$('job-title').textContent=titles[s.status]||s.status;$('job-count').textContent=['ocr','artifacts'].includes(s.status)?`${s.ocr_completed||0} / ${s.ocr_total||0} pages`:`${s.completed||0} / ${s.count||100} problems`;$('job-progress').style.width=s.status==='ready'?'100%':(s.status==='ocr'?Math.max(3,25*(s.ocr_completed||0)/(s.ocr_total||1)):s.status==='artifacts'?25:Math.max(3,(s.ocr?25:0)+(s.ocr?75:100)*(s.completed||0)/(s.count||100)))+'%';$('job-message').textContent=s.message||(s.status==='ready'?'Source-linked problems, training splits, and an executable reward checker. Review the reference answers before training.':'Extracting source evidence and building checkable tasks.');$('download').hidden=!s.download;if(s.download){$('download').href=s.download;$('download').download='environment.zip'}if(s.ocr){$('ocr-result').hidden=false;$('ocr-pages').textContent=s.ocr.pages+' pages';$('ocr-strips').textContent=s.ocr.strips+' strips';$('ocr-artifacts').textContent=s.ocr.artifacts+' artifacts';$('ocr-method').textContent=Object.entries(s.ocr.methods).map(([k,v])=>(k==='tesseract'?'OCR':'Native text')+': '+v+' pages').join(' · ')+' · 200 DPI · source hashes recorded';$('ocr-download').href=s.ocr.download;if($('ocr-page').getAttribute('src')!==s.ocr.preview)$('ocr-page').src=s.ocr.preview}if(s.preview){$('job-preview').replaceChildren();for(const p of s.preview){const el=document.createElement('p');el.textContent=p.prompt;$('job-preview').append(el)}tex()}}
 $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);jobView(s);while(['extracting','ocr','artifacts','generating'].includes(s.status)){await new Promise(r=>setTimeout(r,1500));const poll=await fetch('/api/generation/'+s.id);if(!poll.ok)throw Error('Generation status unavailable');s=await poll.json();jobView(s)}}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
-function drawBridge(){if(renderer&&bridgeState&&page==='engineering')renderer.render(bridgeState,camera)}
-async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
+function drawBridge(){
+ if(!renderer||!bridgeState||page!=='engineering')return;
+ const sample=evidence.engineering?.sample;
+ if(sample){
+  const scene=phase=>({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample[phase]?.editable_bricks||[])]});
+  $('bridge-sample-label').textContent='FIXED HELD-OUT EXAMPLE / '+sample.id;
+  $('bridge-before-label').textContent=`Before · ${(100*sample.before.gap_iou).toFixed(1)}% target overlap`;
+  $('bridge-after-label').textContent=sample.after?`After · ${(100*sample.after.gap_iou).toFixed(1)}% target overlap`:'After training';
+  $('bridge-after-panel').hidden=false;$('paired-bridge').classList.add('has-pair');
+  $('bridge-after-pending').hidden=!!sample.after;$('bridge-after').hidden=!sample.after;
+  $('bridge-target').textContent=`Target post: (${sample.target.x}, ${sample.target.y}), height ${sample.target.top-sample.target.bottom} plates`;
+  renderer.render(scene('before'),camera);if(sample.after&&afterRenderer)afterRenderer.render(scene('after'),camera);
+ }else renderer.render(bridgeState,camera);
+}
+async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));$('bridge-after').dataset.theme='dark';afterRenderer=new BrickRenderer($('bridge-after'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
 $('bridge').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge').setPointerCapture(e.pointerId)});
 $('bridge').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
 for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge').addEventListener(n,()=>pointer=null);
 $('bridge').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
 $('bridge').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();camera.yaw+=e.key==='ArrowLeft'?-.15:e.key==='ArrowRight'?.15:0;camera.pitch+=e.key==='ArrowUp'?-.15:e.key==='ArrowDown'?.15:0;drawBridge()});
+$('bridge-after').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge-after').setPointerCapture(e.pointerId)});
+$('bridge-after').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
+for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-after').addEventListener(n,()=>pointer=null);
+$('bridge-after').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
 $('reset-view').onclick=()=>{Object.assign(camera,{yaw:-.65,pitch:.55,zoom:1});drawBridge()};window.addEventListener('resize',drawBridge);
 refresh();initBridge();tex();setInterval(refresh,15000);
 

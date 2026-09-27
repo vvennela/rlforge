@@ -5,6 +5,30 @@ from pathlib import Path
 def read(p):
     return json.loads(p.read_text()) if p.exists() else None
 
+def first_record(path):
+    if not path.exists():return None
+    for line in path.read_text().splitlines():
+        try:return json.loads(line)
+        except json.JSONDecodeError:continue
+    return None
+
+def engineering_sample(root,run):
+    dataset=root/'runs/engineering-interactive/dataset-v1/heldout.json'
+    if not dataset.exists():return None
+    row=json.loads(dataset.read_text())[0]
+    before=first_record(run/'before/traces.jsonl');after=first_record(run/'after/traces.jsonl')
+    if not before or before['id']!=row['id']:return None
+    if after and after['id']!=row['id']:raise ValueError('Sample pairing mismatch')
+    from ..engineering.worker import PALETTE
+    return {'id':row['id'],'task':row['task'],'target':row['target'],'fixed':row['initial'],'palette':PALETTE,
+            'before':before['state']['observation'],'after':after['state']['observation'] if after else None}
+
+def coding_sample(run):
+    before=first_record(run/'before/episodes.jsonl');after=first_record(run/'after/episodes.jsonl')
+    if not before:return None
+    if after and before['id']!=after['id']:raise ValueError('Sample pairing mismatch')
+    return {'id':before['id'],'before':before,'after':after}
+
 def snapshot(root):
     runs=root/'runs/aws/results/runs'
     before=read(runs/'bf16-before-normalized/graded-summary.json')
@@ -26,8 +50,8 @@ def snapshot(root):
         if not s:return None
         return {'correct':s['correct'] if math else s['successes'],'completed':s['episodes'] if math else s['completed'],'total':20,'complete':s.get('complete',s.get('graded')==20),'mean_reward':s.get('mean_reward'),'mean_gap_iou':s.get('mean_gap_iou')}
     return {'updated_at':time.time(),'model':'Qwen 2.5 · 7B parameters','math':{'before':score(before,True),'after':score(after,True),'steps':80,'status':'Evaluation complete' if after else 'Evaluation scheduled','source':'Optimization · augmented Lagrangian methods','protocol':'20 held-out problems · 10 exact-answer checks + 10 Astra-graded proofs','run':'curriculum-epoch-1'},
-      'coding':{'before':score(cb),'after':score(ca),'status':'Evaluation complete' if cd else 'Training' if coding_steps else 'Baseline evaluation' if cb else 'Queued after engineering' if coding_launch else 'Dataset ready','source':'Korf · executable IDA* implementations','protocol':'20 held-out Python specifications · 16 sandboxed tests each · same greedy decoding before/after','run':coding_launch.get('run'),'steps':coding_steps,'target_steps':coding_launch.get('steps',80)},
-      'engineering':{'before':score(eb),'after':score(ea),'status':'Evaluation complete' if done else 'Training' if records else 'Baseline evaluation','steps':len(records),'target_steps':launch.get('long_steps',50),'reward_updates':records[-1]['reward_contrast_updates'] if records else 0,'source':'Bridge assembly · eight-turn upright repair','protocol':'20 held-out assemblies · identical tools and eight-turn budgets','run':launch.get('long_run','long-003')}}
+      'coding':{'sample':coding_sample(cr),'before':score(cb),'after':score(ca),'status':'Evaluation complete' if cd else 'Training' if coding_steps else 'Baseline evaluation' if cb else 'Queued after engineering' if coding_launch else 'Dataset ready','source':'Korf · executable IDA* implementations','protocol':'20 held-out Python specifications · 16 sandboxed tests each · same greedy decoding before/after','run':coding_launch.get('run'),'steps':coding_steps,'target_steps':coding_launch.get('steps',80)},
+      'engineering':{'sample':engineering_sample(root,er),'before':score(eb),'after':score(ea),'status':'Evaluation complete' if done else 'Training' if records else 'Baseline evaluation','steps':len(records),'target_steps':launch.get('long_steps',50),'reward_updates':records[-1]['reward_contrast_updates'] if records else 0,'source':'Bridge assembly · eight-turn upright repair','protocol':'20 held-out assemblies · identical tools and eight-turn budgets','run':launch.get('long_run','long-003')}}
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
