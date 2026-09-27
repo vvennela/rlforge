@@ -268,3 +268,17 @@ def test_coding_gallery_pairs_complete_baseline_with_partial_final_evaluation(tm
     with pytest.raises(ValueError,match='pairing'):coding_samples(tmp_path)
     (tmp_path/'after/episodes.jsonl').write_text('\n'.join([json.dumps(before[0])]*2))
     with pytest.raises(ValueError,match='Duplicate'):coding_samples(tmp_path)
+
+
+def test_external_math_snapshot_preserves_partial_denominator_and_runtime(tmp_path):
+    from akshara_forge.studio.evidence import math500_snapshot
+    root=tmp_path/'runs/submission-campaign/math500'
+    for phase,n,correct,gpu in [('before',500,396,'NVIDIA L40S'),('after',32,25,'NVIDIA A10G')]:
+        folder=root/phase;folder.mkdir(parents=True)
+        (folder/'summary.json').write_text(json.dumps({'completed':n,'expected':500,'complete':n==500,'correct':correct,'accuracy':correct/n}))
+        (folder/'runtime.json').write_text(json.dumps({'gpu':gpu}))
+    result=math500_snapshot(tmp_path)
+    assert result['before']['complete'] and not result['after']['complete']
+    assert result['after']['completed']==32 and result['after']['expected']==500
+    assert result['after']['gpu']=='NVIDIA A10G' and result['paired'] is False
+    assert 'gain' not in result

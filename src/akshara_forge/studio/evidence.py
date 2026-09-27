@@ -52,6 +52,18 @@ def coding_sample(run):
     samples=coding_samples(run)
     return samples[0] if samples else None
 
+def math500_snapshot(root):
+    base=root/'runs/submission-campaign/math500'
+    result={'before':None,'after':None,'paired':False}
+    for phase in ('before','after'):
+        summary=read(base/phase/'summary.json');runtime=read(base/phase/'runtime.json') or {}
+        if summary:
+            result[phase]={k:summary[k] for k in ('completed','expected','complete','correct','accuracy')}
+            result[phase]['gpu']=runtime.get('gpu')
+    result['queue']=read(base/'queue-status.json')
+    # Hardware mismatch prevents a paired gain; no subtraction is published here.
+    return result
+
 def snapshot(root):
     runs=root/'runs/aws/results/runs'
     before=read(runs/'bf16-before-normalized/graded-summary.json')
@@ -78,7 +90,7 @@ def snapshot(root):
         if not s:return None
         return {'correct':s['correct'] if math else s['successes'],'completed':s['episodes'] if math else s['completed'],'total':20,'complete':s.get('complete',s.get('graded')==20),'mean_reward':s.get('mean_reward'),'mean_field_score':s.get('mean_field_score'),'mean_gap_iou':s.get('mean_gap_iou')}
     samples=engineering_samples(root,er);programs=coding_samples(cr)
-    return {'updated_at':time.time(),'model':'Qwen 2.5 · 7B parameters','math':{'before':score(before,True),'after':score(after,True),'steps':80,'status':'Evaluation complete' if after else 'Evaluation scheduled','source':'Optimization · augmented Lagrangian methods','protocol':'20 held-out problems · 10 exact-answer checks + 10 Astra-graded proofs','run':'curriculum-epoch-1'},
+    return {'updated_at':time.time(),'model':'Qwen 2.5 · 7B parameters','math':{'benchmark':math500_snapshot(root),'before':score(before,True),'after':score(after,True),'steps':80,'status':'Evaluation complete' if after else 'Evaluation scheduled','source':'Optimization · augmented Lagrangian methods','protocol':'20 held-out problems · 10 exact-answer checks + 10 Astra-graded proofs','run':'curriculum-epoch-1'},
       'coding':{'sample':programs[0] if programs else None,'samples':programs,'before':score(cb),'after':score(ca),'status':'Evaluation complete' if cd else 'Final evaluation' if ca or coding_steps>=coding_launch.get('steps',80) else 'Training' if coding_steps else 'Baseline evaluation' if cb else 'Queued after engineering' if coding_launch else 'Dataset ready','source':'Korf · executable IDA* implementations','tests_per_task':coding_launch.get('tests_per_task',16),'protocol':f"20 held-out Python specifications · {coding_launch.get('tests_per_task',16)} sandboxed tests each · same greedy decoding before/after",'run':coding_launch.get('run'),'steps':coding_steps,'target_steps':coding_launch.get('steps',80),'weight_update':{k:coding_records[-1].get(k) for k in ('changed_parameters','delta_l2','nonzero_gradient_elements')} if coding_records else None},
       'engineering':{'sample':samples[0] if samples else None,'samples':samples,'before':score(eb),'after':score(ea),'status':'Evaluation complete' if done else 'Final evaluation' if ea or len(records)>=launch.get('long_steps',50) else 'Training' if records else 'Baseline evaluation','steps':len(records),'target_steps':launch.get('long_steps',50),'reward_updates':records[-1]['reward_contrast_updates'] if records else 0,'weight_update':{k:records[-1].get(k) for k in ('changed_parameters','delta_l2','nonzero_gradient_elements')} if records else None,'source':'Bridge assembly · eight-turn upright repair','protocol':'20 held-out assemblies · identical tools and eight-turn budgets','run':launch.get('long_run','long-003')}}
 

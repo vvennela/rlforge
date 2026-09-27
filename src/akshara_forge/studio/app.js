@@ -25,6 +25,15 @@ function renderCase(){
  if(active==='coding'&&s.before?.mean_field_score!=null){$('run-detail').textContent+=` · Exact field accuracy: ${(100*s.before.mean_field_score).toFixed(1)}% → ${s.after?.mean_field_score!=null?(100*s.after.mean_field_score).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(s.weight_update?.changed_parameters){$('run-detail').textContent+=` · ${s.weight_update.changed_parameters.toLocaleString()} adapter parameters changed`}
  const programs=active==='coding'?(s.samples||(s.sample?[s.sample]:[])):[];
+ const benchmark=evidence.math?.benchmark;
+ $('math-benchmark').hidden=active!=='math'||!benchmark?.before;
+ if(active==='math'&&benchmark){
+  for(const phase of ['before','after']){
+   const result=benchmark[phase],has=result?.completed>0;
+   $('math500-'+phase+'-score').textContent=has?`${result.correct}/${result.completed} · ${(100*result.accuracy).toFixed(1)}%`:'—';
+   $('math500-'+phase+'-detail').textContent=has?`${result.completed}/${result.expected} evaluated · ${result.complete?'complete':'partial'} · ${result.gpu||'GPU recorded in run'}`:(benchmark.queue?.status==='not_started'?'Not started within the compute window':'Queued after coding evaluation');
+  }
+ }
  const codeSample=programs.find(p=>p.id===programSelection)||programs[0];
  $('program-case-control').hidden=programs.length<2;
  if(active==='coding'){
