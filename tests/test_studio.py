@@ -282,3 +282,45 @@ def test_external_math_snapshot_preserves_partial_denominator_and_runtime(tmp_pa
     assert result['after']['completed']==32 and result['after']['expected']==500
     assert result['after']['gpu']=='NVIDIA A10G' and result['paired'] is False
     assert 'gain' not in result
+
+
+@pytest.mark.parametrize('initial_good',[9,10])
+def test_failed_generation_continues_verified_progress(tmp_path,monkeypatch,initial_good):
+    monkeypatch.setattr(g,'config',lambda:{'configured':True,'model':'test'})
+    phase=['fail'];counter=[0];requests=[]
+    def provider(prompt,folder,*,system=g.SYSTEM,**kwargs):
+        data=json.loads(prompt)
+        if system!=g.SYSTEM:
+            return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition',
+                'reference_answer':int(r['prompt'].split()[1])+1,
+                'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong'} for a in [-1,-2,-3]]} for r in data['problems']]}
+        counter[0]+=1;n=int(data['request'].split()[1]);requests.append((phase[0],n))
+        if phase[0]=='fail' and counter[0]>1:raise ValueError('Provider unavailable')
+        return {'problems':[{'prompt':f'Compute {counter[0]*100+i} + 1','source_quote':'Addition','solution_outline':'Add one.',
+            'reference_answer':0 if phase[0]=='fail' and i>=initial_good else counter[0]*100+i+1,
+            'verification':'numeric','tolerance':0} for i in range(n)]}
+    monkeypatch.setattr(g,'call_model',provider)
+    jobs=g.GenerationJobs(tmp_path)
+    def wait(id):
+        for _ in range(500):
+            state=jobs.read(id)
+            if state['status'] in ('ready','failed') and not jobs.busy:return state
+            time.sleep(.01)
+        raise AssertionError('Generation did not terminate')
+    state=jobs.start({'filename':'source.txt','data':base64.b64encode(b'Addition').decode(),'count':20})
+    state=wait(state['id']);assert state['status']=='failed'
+    root=tmp_path/state['id'];saved=json.loads((root/'verified-progress.json').read_text())['problems']
+    assert len(saved)==initial_good
+    receipt=(root/'calls/00/attempt-1/audit.json').read_bytes()
+    phase[0]='recover'
+    jobs.busy=True
+    with pytest.raises(ValueError,match='generating'):jobs.start({'retry':state['id']})
+    jobs.busy=False
+    state=wait(jobs.start({'retry':state['id']})['id'])
+    assert state['status']=='ready',state
+    rows=json.loads((root/'environment/private/problems.json').read_text())
+    for original in saved:assert next(r for r in rows if r['id']==original['id'])==original
+    assert (root/'calls/00/attempt-1/audit.json').read_bytes()==receipt
+    assert [n for phase,n in requests if phase=='recover']==([1,10] if initial_good==9 else [10])
+    assert state['manifest']['runtime_audit']['passed'] and len(rows)==20
+    with pytest.raises(ValueError,match='stopped'):jobs.start({'retry':state['id']})

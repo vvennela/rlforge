@@ -102,3 +102,28 @@ def test_adversarial_dataset_freezes_only_after_reference_and_mutation_gates(tmp
     audit=json.loads((target/'adversarial-audit.json').read_text())
     assert not audit['survivors'] and all(c['mutants_killed'] for cs in audit['glm_case_coverage'].values() for c in cs)
     with pytest.raises(ValueError,match='Frozen'):a.build(original,target,resume=True)
+
+
+def test_redundant_review_array_preserves_verification(tmp_path):
+    def nested(answer):
+        def call(prompt,folder,**kwargs):
+            return {'problems':[reviewer(answer)(prompt,folder,**kwargs)['problems']]}
+        return call
+    assert review([row()],'Addition',tmp_path/'good',nested(4))['passed']
+    with pytest.raises(ValueError,match='rejected'):
+        review([row()],'Addition',tmp_path/'bad',nested(3))
+
+
+def test_malformed_reviewer_retries_without_author_answers(tmp_path):
+    calls=[]
+    def provider(prompt,folder,**kwargs):
+        calls.append(json.loads(prompt))
+        assert 'secret author reasoning' not in prompt
+        if len(calls)==1:return {'problems':['invalid']}
+        if len(calls)==2:return {'problems':[{'id':[],'attacks':[]}]}
+        return reviewer()(prompt,folder,**kwargs)
+    assert review([row()],'Addition',tmp_path,provider)['passed']
+    assert len(calls)==3
+    assert all(c['problems']==[{'id':'q1','prompt':'Compute 2+2'}] for c in calls)
+    assert (tmp_path/'blind-review/schema-error.json').exists()
+    assert (tmp_path/'blind-review/schema-retry-1/schema-error.json').exists()

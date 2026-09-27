@@ -131,12 +131,26 @@ class GenerationJobs:
     def __init__(self,root):
         self.root=Path(root);self.root.mkdir(parents=True,exist_ok=True);self.lock=threading.Lock();self.busy=False
     def read(self,id):
-        if len(id)!=32 or any(c not in '0123456789abcdef' for c in id):raise ValueError('Invalid job ID')
+        if not isinstance(id,str) or len(id)!=32 or any(c not in '0123456789abcdef' for c in id):raise ValueError('Invalid job ID')
         return json.loads((self.root/id/'status.json').read_text())
     def status(self,folder,**fields):
         p=folder/'status.json';d=json.loads(p.read_text()) if p.exists() else {'id':folder.name};d.update(fields)
         tmp=folder/'status.tmp';tmp.write_text(json.dumps(d,indent=2));tmp.replace(p)
+    def retry(self,id):
+        previous=self.read(id)
+        if previous['status'] not in ('failed','awaiting_connection'):raise ValueError('Only stopped generation can be continued.')
+        folder=self.root/id
+        with self.lock:
+            if self.busy:raise ValueError('An environment is generating. Wait for it to finish.')
+            self.busy=True
+        recovery='recovery-'+uuid.uuid4().hex[:12]
+        (folder/recovery).mkdir()
+        (folder/recovery/'previous-status.json').write_text(json.dumps(previous,indent=2))
+        self.status(folder,status='generating',message='Continuing from verified problems and saved document extraction.',recovery=recovery)
+        threading.Thread(target=self.run,args=(folder,previous['filename'],previous['count']),kwargs={'recovery':recovery},daemon=True).start()
+        return self.read(id)
     def start(self,req):
+        if 'retry' in req:return self.retry(req['retry'])
         name=Path(req.get('filename','specification.txt')).name;count=req.get('count',100)
         if count not in (20,100):raise ValueError('Select 20 or 100 problems.')
         data=base64.b64decode(req.get('data',''),validate=True)
@@ -150,28 +164,70 @@ class GenerationJobs:
         self.status(folder,status='extracting',filename=name,count=count,completed=0,provider=config())
         threading.Thread(target=self.run,args=(folder,name,count),daemon=True).start()
         return self.read(id)
-    def run(self,folder,name,count):
+    def run(self,folder,name,count,*,recovery=None):
         try:
             raw=folder/name;pages=[];source_artifacts=[]
-            if raw.suffix.lower()=='.pdf':
+            if recovery and (folder/'raw-pages.json').exists():
+                pages=json.loads((folder/'raw-pages.json').read_text())
+                if (folder/'source-artifacts.json').exists():
+                    source_artifacts=json.loads((folder/'source-artifacts.json').read_text())
+                else:
+                    # Older jobs stored the artifact context in their author receipt.
+                    receipt=folder/'calls/00/attempt-1/request.json'
+                    if receipt.exists():
+                        saved=json.loads(receipt.read_text())['request']
+                        user=saved.get('input') or next((m['content'] for m in saved.get('messages',[]) if m['role']=='user'),'{}')
+                        source_artifacts=json.loads(user).get('source_artifacts',[])
+            elif raw.suffix.lower()=='.pdf':
                 from .ocr import prepare
                 pages,source_artifacts=prepare(raw,folder,lambda **fields:self.status(folder,**fields))
             else:pages=[{'page':1,'text':raw.read_text(encoding='utf-8')}]
             source='\n\n'.join(p['text'] for p in pages)
+            (folder/'source-artifacts.json').write_text(json.dumps(source_artifacts,ensure_ascii=False,indent=2))
             (folder/'raw-pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2))
             (folder/'source.txt').write_text(source)
             if not source.strip() or len(source)>120000:raise ValueError('Upload a specification containing 1–120,000 text characters.')
             if not config()['configured']:
                 self.status(folder,status='awaiting_connection',message='Document extracted. Connect the server API key to generate its environment.',pages=len(pages));return
             self.status(folder,status='generating',pages=len(pages),message='Generating source-linked practice problems.')
-            rows=[];audits=[];title=name
+            rows=[];audits=[];title=name;retained={};retained_checks={}
+            if recovery and (folder/'verified-progress.json').exists():
+                progress=json.loads((folder/'verified-progress.json').read_text())
+                audits=progress['audits'];full_count=len(audits)*10
+                verified=progress['problems']
+                if progress['requested']!=count or len(verified)!=progress['completed'] or not full_count<=len(verified)<=min(full_count+10,count):raise ValueError('Saved progress count mismatch')
+                rows=verified[:full_count];retained={r['id']:r for r in verified[full_count:]}
+                retained_checks=progress.get('pending_batch_reviews',{}) if retained else {}
+                all_checks={r['id']:r for a in audits for r in a['problems']}
+                all_checks.update(retained_checks)
+                if len({r['id'] for r in verified})!=len(verified):raise ValueError('Duplicate saved problem IDs')
+                for row in verified:
+                    check=all_checks.get(row['id'])
+                    if not check or check.get('passed') is not True:raise ValueError('Saved problem lacks successful review')
+                    relative=Path(check['review_evidence']).relative_to('private/reviews')
+                    actual=(folder/relative).resolve()
+                    if not actual.is_relative_to(folder.resolve()):raise ValueError('Invalid review evidence path')
+                    original=json.loads(actual.read_text())
+                    original_check=next((c for c in original['problems'] if c['id']==row['id'] and c['passed']),None)
+                    if original_check!={k:v for k,v in check.items() if k!='review_evidence'}:raise ValueError('Original review evidence mismatch')
+                    from .verifier import accepts
+                    if not accepts(row,original_check['independent_solution']['reference_answer']):raise ValueError('Saved answer disagrees with original review')
+                validate({'problems':verified},source,len(verified))
+                expected_prefix=[f'problem-{i:03}' for i in range(1,full_count+1)]
+                expected_pending={f'problem-{i:03}' for i in range(full_count+1,min(full_count+10,count)+1)}
+                if [r['id'] for r in rows]!=expected_prefix or not set(retained)<=expected_pending:raise ValueError('Saved problem order mismatch')
+                if len(retained)==10:
+                    ordered=sorted(retained)
+                    rows.extend(retained[id] for id in ordered)
+                    audits.append({'method':'blind GLM solution cross-check plus adversarial verifier probes','passed':True,'problems':[retained_checks[id] for id in ordered]})
+                    retained={};retained_checks={}
             model_call=partial(call_model,json_prefix=True)
-            for offset in range(0,count,10):
-                feedback=None;accepted={};accepted_checks={}
+            for offset in range(len(rows),count,10):
+                feedback=None;accepted=retained;accepted_checks=retained_checks;retained={};retained_checks={}
                 batch_ids=[f'problem-{index:03}' for index in range(offset+1,offset+11)]
                 for attempt in range(1,6):
                     pending=[id for id in batch_ids if id not in accepted]
-                    call_folder=folder/f'calls/{offset//10:02}/attempt-{attempt}'
+                    call_folder=folder/'calls'/recovery/f'{offset//10:02}/attempt-{attempt}' if recovery else folder/f'calls/{offset//10:02}/attempt-{attempt}'
                     packet=None;batch=None;audit=None;error=None
                     try:
                         packet=model_call(json.dumps({'request':f'Generate {len(pending)} distinct problems for batch {offset//10+1}.',
@@ -225,7 +281,7 @@ class GenerationJobs:
                     self.status(folder,status='generating',completed=len(rows)+len(accepted),reviewed=len(rows)+len(accepted),
                         message=f'Retained {len(accepted)} verified problems; replacing {10-len(accepted)} rejected problems in batch {offset//10+1} (attempt {attempt+1} of 5).')
             if len({r['prompt'] for r in rows})!=count:raise ValueError('Duplicate problem statements detected.')
-            bundle=folder/'environment';(bundle/'private').mkdir(parents=True)
+            bundle=folder/'environment';(bundle/'private').mkdir(parents=True,exist_ok=True)
             (bundle/'private/problems.json').write_text(json.dumps(rows,indent=2))
             (bundle/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows],indent=2))
             (bundle/'environment.py').write_text(RUNTIME)
@@ -234,9 +290,9 @@ class GenerationJobs:
             for receipt in (folder/'calls').glob('**/audit.json'):
                 target=bundle/'private/reviews'/receipt.relative_to(folder)
                 target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(receipt.read_bytes())
-            learner=bundle/'learner';learner.mkdir()
+            learner=bundle/'learner';learner.mkdir(exist_ok=True)
             (learner/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows if r['split']=='train'],indent=2))
-            evaluation=bundle/'evaluation';evaluation.mkdir()
+            evaluation=bundle/'evaluation';evaluation.mkdir(exist_ok=True)
             (evaluation/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows if r['split']=='heldout'],indent=2))
             (learner/'README.md').write_text('This directory is safe to mount in the learner sandbox. Submit answers through the controller API. Never mount the parent directory: it contains private reference answers and adversarial probes.\n')
             (bundle/'source.txt').write_text(source)

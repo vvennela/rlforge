@@ -25,15 +25,6 @@ function renderCase(){
  if(active==='coding'&&s.before?.mean_field_score!=null){$('run-detail').textContent+=` · Exact field accuracy: ${(100*s.before.mean_field_score).toFixed(1)}% → ${s.after?.mean_field_score!=null?(100*s.after.mean_field_score).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(s.weight_update?.changed_parameters){$('run-detail').textContent+=` · ${s.weight_update.changed_parameters.toLocaleString()} adapter parameters changed`}
  const programs=active==='coding'?(s.samples||(s.sample?[s.sample]:[])):[];
- const benchmark=evidence.math?.benchmark;
- $('math-benchmark').hidden=active!=='math'||!benchmark?.before;
- if(active==='math'&&benchmark){
-  for(const phase of ['before','after']){
-   const result=benchmark[phase],has=result?.completed>0;
-   $('math500-'+phase+'-score').textContent=has?`${result.correct}/${result.completed} · ${(100*result.accuracy).toFixed(1)}%`:'—';
-   $('math500-'+phase+'-detail').textContent=has?`${result.completed}/${result.expected} evaluated · ${result.complete?'complete':'partial'} · ${result.gpu||'GPU recorded in run'}`:(benchmark.queue?.status==='not_started'?'Not started within the compute window':'Queued after coding evaluation');
-  }
- }
  const codeSample=programs.find(p=>p.id===programSelection)||programs[0];
  $('program-case-control').hidden=programs.length<2;
  if(active==='coding'){
@@ -72,7 +63,7 @@ $('paper').addEventListener('change',()=>choose($('paper').files[0]));
 for(const name of ['dragenter','dragover'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.add('dragover')});
 for(const name of ['dragleave','drop'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.remove('dragover')});
 $('dropzone').addEventListener('drop',e=>{choose(e.dataTransfer.files[0]);$('paper').required=false});
-function jobView(s){$('job').hidden=false;const titles={extracting:'Reading your document',ocr:'Reading scanned pages',artifacts:'Extracting source artifacts',generating:'Generating the environment',reviewing:'Testing adversarial answers',ready:'Your environment is ready',failed:'Generation stopped',awaiting_connection:'Document ready'};$('job-title').textContent=titles[s.status]||s.status;$('job-count').textContent=['ocr','artifacts'].includes(s.status)?`${s.ocr_completed||0} / ${s.ocr_total||0} pages`:`${s.completed||0} / ${s.count||100} problems`;$('job-progress').style.width=s.status==='ready'?'100%':(s.status==='ocr'?Math.max(3,25*(s.ocr_completed||0)/(s.ocr_total||1)):s.status==='artifacts'?25:Math.max(3,(s.ocr?25:0)+(s.ocr?75:100)*(s.completed||0)/(s.count||100)))+'%';$('job-message').textContent=s.message||(s.status==='ready'?'Source-linked problems, training splits, and an executable reward checker. Review the reference answers before training.':'Extracting source evidence and building checkable tasks.');$('download').hidden=!s.download;if(s.download){$('download').href=s.download;$('download').download='environment.zip'}if(s.ocr){$('ocr-result').hidden=false;$('ocr-pages').textContent=s.ocr.pages+' pages';$('ocr-strips').textContent=s.ocr.strips+' strips';$('ocr-artifacts').textContent=s.ocr.artifacts+' artifacts';$('ocr-method').textContent=Object.entries(s.ocr.methods).map(([k,v])=>(k==='tesseract'?'OCR':'Native text')+': '+v+' pages').join(' · ')+' · 200 DPI · source hashes recorded';$('ocr-download').href=s.ocr.download;if($('ocr-page').getAttribute('src')!==s.ocr.preview)$('ocr-page').src=s.ocr.preview}if(s.preview){$('job-preview').replaceChildren();for(const p of s.preview){const el=document.createElement('p');el.textContent=p.prompt;$('job-preview').append(el)}tex()}}
+function jobView(s){$('retry-generation').hidden=s.status!=='failed'||!s.id;$('retry-generation').dataset.jobId=s.id||'';$('job').hidden=false;const titles={extracting:'Reading your document',ocr:'Reading scanned pages',artifacts:'Extracting source artifacts',generating:'Generating the environment',reviewing:'Testing adversarial answers',ready:'Your environment is ready',failed:'Generation stopped',awaiting_connection:'Document ready'};$('job-title').textContent=titles[s.status]||s.status;$('job-count').textContent=['ocr','artifacts'].includes(s.status)?`${s.ocr_completed||0} / ${s.ocr_total||0} pages`:`${s.completed||0} / ${s.count||100} problems`;$('job-progress').style.width=s.status==='ready'?'100%':(s.status==='ocr'?Math.max(3,25*(s.ocr_completed||0)/(s.ocr_total||1)):s.status==='artifacts'?25:Math.max(3,(s.ocr?25:0)+(s.ocr?75:100)*(s.completed||0)/(s.count||100)))+'%';$('job-message').textContent=s.message||(s.status==='ready'?'Source-linked problems, training splits, and an executable reward checker. Review the reference answers before training.':'Extracting source evidence and building checkable tasks.');$('download').hidden=!s.download;if(s.download){$('download').href=s.download;$('download').download='environment.zip'}if(s.ocr){$('ocr-result').hidden=false;$('ocr-pages').textContent=s.ocr.pages+' pages';$('ocr-strips').textContent=s.ocr.strips+' strips';$('ocr-artifacts').textContent=s.ocr.artifacts+' artifacts';$('ocr-method').textContent=Object.entries(s.ocr.methods).map(([k,v])=>(k==='tesseract'?'OCR':'Native text')+': '+v+' pages').join(' · ')+' · 200 DPI · source hashes recorded';$('ocr-download').href=s.ocr.download;if($('ocr-page').getAttribute('src')!==s.ocr.preview)$('ocr-page').src=s.ocr.preview}if(s.preview){$('job-preview').replaceChildren();for(const p of s.preview){const el=document.createElement('p');el.textContent=p.prompt;$('job-preview').append(el)}tex()}}
 function rememberJob(id){
  const url=new URL(location.href);url.searchParams.set('environment',id);history.replaceState(null,'',url);
 }
@@ -97,6 +88,16 @@ async function resumeJob(){
  }catch(e){jobView({status:'failed',message:e.message})}
  finally{$('generate').disabled=false}
 }
+$('retry-generation').onclick=async()=>{
+ const button=$('retry-generation'),id=button.dataset.jobId;
+ button.disabled=true;$('generate').disabled=true;
+ try{
+  const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retry:id})});
+  const state=await response.json();if(!response.ok)throw Error(state.error);
+  rememberJob(state.id);await followJob(state);
+ }catch(e){jobView({id,status:'failed',message:e.message})}
+ finally{button.disabled=false;$('generate').disabled=false}
+};
 $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);rememberJob(s.id);await followJob(s)}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
 function drawBridge(){
  if(!renderer||!bridgeState||page!=='engineering')return;
