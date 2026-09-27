@@ -100,9 +100,10 @@ def validate(packet,source,count):
         json.dumps(row,allow_nan=False)
         if row['verification']=='exact_json':
             row['answer_schema']=answer_schema(row['reference_answer'])
-            row['prompt']+='\nReturn only a JSON value matching this response schema (keys are required; use integer literals for integer fields): '+json.dumps(row['answer_schema'])
+            instruction='Return only a JSON value matching this response schema (keys are required; use integer literals for integer fields): '+json.dumps(row['answer_schema'])
         else:
-            row['prompt']+='\nReturn only the numeric answer as a JSON number.'
+            instruction='Return only the numeric answer as a JSON number.'
+        if not row['prompt'].rstrip().endswith(instruction):row['prompt']+='\n'+instruction
     return rows
 
 RUNTIME='''import argparse, json, sys

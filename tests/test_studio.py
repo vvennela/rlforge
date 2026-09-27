@@ -240,3 +240,13 @@ def test_upload_keeps_validated_items_and_only_replaces_rejected_ones(tmp_path,m
     for audit in published:
         for item in audit['problems']:
             assert (root/'environment'/item['review_evidence']).is_file()
+
+
+@pytest.mark.parametrize('answer,mode',[(3,'numeric'),({'cost':3},'exact_json')])
+def test_revalidating_revised_question_does_not_duplicate_output_instructions(answer,mode):
+    packet={'problems':[{'prompt':'Compute the cost','source_quote':'Addition','solution_outline':'Add one',
+        'reference_answer':answer,'verification':mode,'tolerance':0}]}
+    g.validate(packet,'Addition',1);first=packet['problems'][0]['prompt']
+    g.validate(packet,'Addition',1)
+    assert packet['problems'][0]['prompt']==first
+    assert first.count('Return only')==1

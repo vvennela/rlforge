@@ -41,3 +41,11 @@ how new domains add tools and independent verifiers.
   matched held-out scores establish behavioral improvement.
 - The original MATH-500 baseline used an L40S. An A10G result is labeled separately
   unless a matched baseline is available. Benchmark questions never guide training.
+
+## Completed upload example
+
+[Open the Korf scanned-paper environment](https://aksharaforge-yhm6.netbird.64-177-45-215.sslip.io/?environment=9c298aac6f3747fc83e7f043d9fd8ce4#upload)
+when presenting the finished output: 13 OCR pages, 39 strips, 20 reviewed problems,
+and a portable runtime checked against 270 answer probes. Uploading a new paper
+shows the generation process; the saved example supplies an immediate completed
+artifact for the three-minute presentation.

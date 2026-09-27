@@ -40,3 +40,18 @@ over at most five attempts. Accepted questions keep their complete review and
 adversarial probes; original batch audits are included under `private/reviews/`.
 A package is released only when every requested question passes and its exported
 runtime passes the answer probes and train/held-out isolation checks.
+
+## Scanned-paper demonstration
+
+The deployed Korf paper example completed OCR on all 13 scanned pages, preserving
+39 strips and 26 extracted artifacts. GLM generated 20 problems with a 16/4 split;
+eight blind review calls supplied the accepted questions and adversarial probes.
+The downloaded runtime passed 270 answer probes and both split-isolation checks.
+Independent arithmetic and finite-tree calculations matched all 20 numerical
+references. This numerical audit does not certify every explanatory source claim.
+
+[Open the completed paper environment](https://aksharaforge-yhm6.netbird.64-177-45-215.sslip.io/?environment=9c298aac6f3747fc83e7f043d9fd8ce4#upload).
+The demo route expires with its NetBird session. Its downloaded bundle SHA-256 is
+`c385439c5123730515bed3038c623a2ea2019a4e7b75619617eab090ea4dd219`.
+The bundle includes source evidence, accepted reviews, and the original batch
+audits, including rejected drafts. The local run archive preserves every raw call.
