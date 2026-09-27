@@ -165,3 +165,20 @@ def test_source_ids_resolve_to_exact_preserved_passages():
     assert row['source_quote']==parts[1]['text']
     with pytest.raises(ValueError,match='Unknown source_id'):
         bind_reference({'source_id':'invented'},source)
+
+
+def test_structured_problem_states_response_shape_without_answer_values():
+    packet={'problems':[{'prompt':'Compute the sum and path.','source_quote':'Addition',
+      'solution_outline':'Calculate.','verification':'exact_json','reference_answer':{'sum':437,'path':['A','B','C']}}]}
+    row=g.validate(packet,'Addition',1)[0]
+    assert '"sum"' in row['prompt'] and '"path"' in row['prompt']
+    assert '437' not in row['prompt'] and '"A"' not in row['prompt']
+    assert 'minItems' not in row['prompt'] and 'maxItems' not in row['prompt']
+    assert row['answer_schema']['properties']['sum']=={'type':'integer'}
+
+
+def test_response_shape_does_not_reveal_null_or_empty_answers():
+    from akshara_forge.studio.source import answer_schema
+    assert answer_schema(None)=={}
+    assert answer_schema({})=={'type':'object'}
+    assert answer_schema([])=={'type':'array','items':{}}

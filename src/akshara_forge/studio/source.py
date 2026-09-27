@@ -45,3 +45,23 @@ def bind_reference(row,source):
     row['source_quote']=passage['text']
     row['source_quote_alignment']={'method':'source_id_lookup','start_char':passage['start_char'],
         'end_char':passage['end_char'],'source_text_sha256':hashlib.sha256(source.encode()).hexdigest()}
+
+
+def answer_schema(value):
+    """Describe the response shape without disclosing answer values or array lengths."""
+    if value is None:return {}  # A singleton null type would disclose the answer.
+    if isinstance(value,bool):return {'type':'boolean'}
+    if isinstance(value,int):return {'type':'integer'}
+    if isinstance(value,float):return {'type':'number'}
+    if isinstance(value,str):return {'type':'string'}
+    if isinstance(value,dict):
+        if not value:return {'type':'object'}
+        return {'type':'object','properties':{k:answer_schema(v) for k,v in value.items()},
+                'required':list(value),'additionalProperties':False}
+    if isinstance(value,list):
+        kinds=[]
+        for item in value:
+            shape=answer_schema(item)
+            if shape not in kinds:kinds.append(shape)
+        return {'type':'array','items':kinds[0] if len(kinds)==1 else {'anyOf':kinds} if kinds else {}}
+    raise ValueError('Unsupported answer type.')
