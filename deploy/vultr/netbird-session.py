@@ -24,6 +24,22 @@ def api(method, path, body=None):
         content = response.read()
         return json.loads(content) if content else None
 
+def check_health(service_id):
+    """A failed observation must not revoke a still-valid public route."""
+    try:
+        current = api('GET', 'reverse-proxies/services/' + service_id)
+    except urllib.error.HTTPError as error:
+        if error.code not in (408, 429) and error.code < 500:
+            raise
+        print('NetBird health check deferred: HTTP ' + str(error.code), flush=True)
+        return False
+    except (TimeoutError, ConnectionError, urllib.error.URLError) as error:
+        print('NetBird health check deferred: ' + type(error).__name__, flush=True)
+        return False
+    if not current.get('enabled'):
+        raise RuntimeError('NetBird demo service was disabled')
+    return True
+
 def cleanup():
     SESSION.unlink(missing_ok=True)
     if STATE.exists():
@@ -62,9 +78,7 @@ def main():
         # REST-managed service avoids the CLI expose stream's renewal timeout.
         # systemd RuntimeMaxSec and ExecStopPost enforce the session lifetime.
         while not stop.wait(30):
-            current = api('GET', 'reverse-proxies/services/' + service['id'])
-            if not current.get('enabled'):
-                raise RuntimeError('NetBird demo service was disabled')
+            check_health(service['id'])
     finally:
         cleanup()
 
