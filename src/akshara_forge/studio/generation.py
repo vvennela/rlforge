@@ -18,21 +18,21 @@ def config():
     return {'provider':s['provider'],'model':s['model'],'configured':bool(s['key'] and s['model'])}
 
 
-def call_model(prompt, folder, client=None):
+def call_model(prompt, folder, client=None, *, system=SYSTEM):
     c=config()
     if not c['configured']:raise ValueError('Connect the generation API key on the server to start generation.')
     owned=client is None; client=client or httpx.Client(timeout=240)
     try:
         if c['provider']=='openai':
             url='https://api.openai.com/v1/responses';key=settings()['key']
-            req={'model':c['model'],'instructions':SYSTEM,'input':prompt,'max_output_tokens':14000,
+            req={'model':c['model'],'instructions':system,'input':prompt,'max_output_tokens':14000,
                  'reasoning':{'effort':'medium'},'text':{'format':{'type':'json_object'}},'store':False}
         else:
             url='https://api.vultrinference.com/v1/chat/completions';key=settings()['key']
             catalog=client.get('https://api.vultrinference.com/v1/models',headers={'Authorization':'Bearer '+key});catalog.raise_for_status()
             selected=next((m for m in catalog.json()['data'] if m['id']==c['model']),None)
             if not selected:raise ValueError('Selected model is not in the Vultr inference catalog.')
-            req={'model':c['model'],'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt}],'max_tokens':32768}
+            req={'model':c['model'],'messages':[{'role':'system','content':system},{'role':'user','content':prompt}],'max_tokens':32768}
             if selected.get('reasoning') and not selected['reasoning'].get('mandatory',True):
                 req['reasoning']={'enabled':False}  # Structured generation must finish the JSON packet.
         folder.mkdir(parents=True,exist_ok=True)
@@ -78,26 +78,26 @@ def validate(packet,source,count):
         if row['verification']=='numeric':
             import math
             if type(row['reference_answer']) not in (int,float) or not math.isfinite(row['reference_answer']):raise ValueError('Numeric answer must be finite.')
-            if not 0<=float(row.get('tolerance',0))<=1e-6:raise ValueError('Invalid numeric tolerance.')
+            if type(row.get('tolerance',0)) not in (int,float) or not 0<=row.get('tolerance',0)<=1e-6:raise ValueError('Invalid numeric tolerance.')
         json.dumps(row,allow_nan=False)
     return rows
 
-RUNTIME='''import json, math, sys
+RUNTIME='''import json, sys
 from pathlib import Path
+from verifier import accepts
 rows={r["id"]:r for r in json.loads((Path(__file__).parent/"private/problems.json").read_text())}
 current=None
 for line in sys.stdin:
  try:
-  request=json.loads(line)
+  if len(line)>100000:raise ValueError("Request too large")
+  request=json.loads(line,parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON")))
   if request["op"]=="reset":
    current=rows[request["id"]];out={"id":current["id"],"prompt":current["prompt"]}
   elif request["op"]=="step" and current is not None:
-   answer=request["answer"];expected=current["reference_answer"]
-   if current["verification"]=="numeric":ok=type(answer) in (int,float) and math.isfinite(answer) and abs(answer-expected)<=current.get("tolerance",0)
-   else:ok=json.dumps(answer,sort_keys=True)==json.dumps(expected,sort_keys=True)
-   out={"reward":int(ok),"done":True};current=None
+   row=current;current=None
+   out={"reward":int(accepts(row,request["answer"])),"done":True}
   else:raise ValueError("Reset a problem before submitting an answer")
- except Exception as e:out={"error":str(e)}
+ except Exception:out={"error":"Invalid request"}
  print(json.dumps(out),flush=True)
 '''
 
@@ -138,29 +138,39 @@ class GenerationJobs:
             if not config()['configured']:
                 self.status(folder,status='awaiting_connection',message='Document extracted. Connect the server API key to generate its environment.',pages=len(pages));return
             self.status(folder,status='generating',pages=len(pages),message='Generating source-linked practice problems.')
-            rows=[];title=name
+            rows=[];audits=[];title=name
             for offset in range(0,count,10):
                 packet=call_model(json.dumps({'request':f'Generate 10 distinct problems for batch {offset//10+1}.','source':source,'source_artifacts':source_artifacts,'previous_prompts':[r['prompt'] for r in rows]}),folder/f'calls/{offset//10:02}')
                 batch=validate(packet,source,10);title=packet.get('title',name)
                 for r in batch:
                     r['id']=f'problem-{len(rows)+1:03}';r['split']='train' if len(rows)<count*4//5 else 'heldout';rows.append(r)
-                self.status(folder,completed=len(rows),title=title)
+                self.status(folder,status='reviewing',completed=len(rows),title=title,message='Independently solving problems and testing adversarial answers.')
+                from .adversarial import review
+                audits.append(review(batch,source,folder/f'calls/{offset//10:02}',call_model))
+                self.status(folder,status='generating',completed=len(rows),reviewed=len(rows),title=title)
             if len({r['prompt'] for r in rows})!=count:raise ValueError('Duplicate problem statements detected.')
             bundle=folder/'environment';(bundle/'private').mkdir(parents=True)
             (bundle/'private/problems.json').write_text(json.dumps(rows,indent=2))
             (bundle/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows],indent=2))
             (bundle/'environment.py').write_text(RUNTIME)
+            (bundle/'verifier.py').write_text(Path(__file__).with_name('verifier.py').read_text())
+            (bundle/'private/adversarial-audit.json').write_text(json.dumps(audits,indent=2))
+            learner=bundle/'learner';learner.mkdir()
+            (learner/'tasks.json').write_bytes((bundle/'tasks.json').read_bytes())
+            (learner/'README.md').write_text('This directory is safe to mount in the learner sandbox. Submit answers through the controller API. Never mount the parent directory: it contains private reference answers and adversarial probes.\n')
             (bundle/'source.txt').write_text(source)
-            manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'schema and source quotations checked; reference answers await independent verification','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
+            from .adversarial import check_exported_runtime
+            runtime_audit=check_exported_runtime(bundle,audits)
+            manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'source evidence, blind solution cross-check, and adversarial verifier probes passed','runtime_audit':runtime_audit,'review_calls':len(audits),'adversarial_cases':sum(len(r['verifier_tests']) for a in audits for r in a['problems']),'review_method':'Separate GLM call without author answers; same-model agreement, not formal proof','learner_mount':'learner/','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
             ocr=self.read(folder.name).get('ocr')
             if ocr:manifest['source_evidence']=ocr
             (bundle/'manifest.json').write_text(json.dumps(manifest,indent=2))
-            (bundle/'README.md').write_text('# '+title+'\n\nRun `python environment.py` and send JSON lines: {"op":"reset","id":"problem-001"}, then {"op":"step","answer":42}.\n\nKeep private/problems.json on the verifier host; never mount it in the learner sandbox. Validate generated reference answers before training. The runtime returns a scalar reward and terminates each one-answer episode.\n')
+            (bundle/'README.md').write_text('# '+title+'\n\nRun `python environment.py` and send JSON lines: {"op":"reset","id":"problem-001"}, then {"op":"step","answer":42}.\n\nMount only learner/ in the network-isolated learner sandbox. Run environment.py on the controller; keep private/ and source evidence outside the learner. Blind same-model solution checks and adversarial answer probes are recorded in private/adversarial-audit.json. These check answer agreement and grader behavior; formal or executable domain verification is a separate requirement. The runtime returns a scalar reward and terminates each one-answer episode.\n')
             with zipfile.ZipFile(folder/'environment.zip','w',zipfile.ZIP_DEFLATED) as z:
                 if (folder/'source-evidence.zip').exists():z.write(folder/'source-evidence.zip','source-evidence.zip',compress_type=zipfile.ZIP_STORED)
                 for p in bundle.rglob('*'):
                     if p.is_file():z.write(p,str(p.relative_to(bundle)))
-            self.status(folder,status='ready',message='Environment packaged with source evidence and executable reward checks.',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split')} for r in rows[:3]])
+            self.status(folder,status='ready',message='Environment packaged: source checks, blind solution review, and adversarial reward tests passed.',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split')} for r in rows[:3]])
         except Exception as exc:
             message=f'Provider request failed (HTTP {exc.response.status_code}).' if isinstance(exc,httpx.HTTPStatusError) else str(exc)[:250]
             self.status(folder,status='failed',message=message)

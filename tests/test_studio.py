@@ -16,7 +16,10 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
     monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
     monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
     counter=[0]
-    def provider(prompt,folder):
+    def provider(prompt,folder,*,system=g.SYSTEM):
+        if system!=g.SYSTEM:
+            request=json.loads(prompt)
+            return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}
         rows=[]
         for _ in range(10):
             counter[0]+=1
@@ -32,6 +35,9 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
     p=tmp_path/s['id']/'environment'
     rows=json.loads((p/'private/problems.json').read_text());assert sum(r['split']=='heldout' for r in rows)==4
     public=json.loads((p/'tasks.json').read_text());assert 'reference_answer' not in public[0]
+    assert (p/'learner/tasks.json').exists()
+    audit=json.loads((p/'private/adversarial-audit.json').read_text());assert all(a['passed'] for a in audit)
+    assert s['manifest']['adversarial_cases']>=80
     result=subprocess.run([sys.executable,str(p/'environment.py')],input='{"op":"reset","id":"problem-001"}\n{"op":"step","answer":2}\n{"op":"step","answer":2}\n',text=True,capture_output=True,check=True)
     result=[json.loads(l) for l in result.stdout.splitlines()]
     assert result[1]=={'reward':1,'done':True};assert 'error' in result[2]
