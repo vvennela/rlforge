@@ -87,17 +87,18 @@ def validate(packet,source,count):
         json.dumps(row,allow_nan=False)
     return rows
 
-RUNTIME='''import json, sys
+RUNTIME='''import argparse, json, sys
 from pathlib import Path
 from verifier import accepts
-rows={r["id"]:r for r in json.loads((Path(__file__).parent/"private/problems.json").read_text())}
+parser=argparse.ArgumentParser();parser.add_argument("--split",choices=("train","heldout"),default="train");args=parser.parse_args()
+rows={r["id"]:r for r in json.loads((Path(__file__).parent/"private/problems.json").read_text()) if r["split"]==args.split}
 current=None
 for line in sys.stdin:
  try:
   if len(line)>100000:raise ValueError("Request too large")
   request=json.loads(line,parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON")))
   if request["op"]=="reset":
-   current=rows[request["id"]];out={"id":current["id"],"prompt":current["prompt"]}
+   current=None;current=rows[request["id"]];out={"id":current["id"],"prompt":current["prompt"]}
   elif request["op"]=="step" and current is not None:
    row=current;current=None
    out={"reward":int(accepts(row,request["answer"])),"done":True}
@@ -161,7 +162,9 @@ class GenerationJobs:
             (bundle/'verifier.py').write_text(Path(__file__).with_name('verifier.py').read_text())
             (bundle/'private/adversarial-audit.json').write_text(json.dumps(audits,indent=2))
             learner=bundle/'learner';learner.mkdir()
-            (learner/'tasks.json').write_bytes((bundle/'tasks.json').read_bytes())
+            (learner/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows if r['split']=='train'],indent=2))
+            evaluation=bundle/'evaluation';evaluation.mkdir()
+            (evaluation/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows if r['split']=='heldout'],indent=2))
             (learner/'README.md').write_text('This directory is safe to mount in the learner sandbox. Submit answers through the controller API. Never mount the parent directory: it contains private reference answers and adversarial probes.\n')
             (bundle/'source.txt').write_text(source)
             from .adversarial import check_exported_runtime
@@ -170,7 +173,7 @@ class GenerationJobs:
             ocr=self.read(folder.name).get('ocr')
             if ocr:manifest['source_evidence']=ocr
             (bundle/'manifest.json').write_text(json.dumps(manifest,indent=2))
-            (bundle/'README.md').write_text('# '+title+'\n\nRun `python environment.py` and send JSON lines: {"op":"reset","id":"problem-001"}, then {"op":"step","answer":42}.\n\nMount only learner/ in the network-isolated learner sandbox. Run environment.py on the controller; keep private/ and source evidence outside the learner. Blind same-model solution checks and adversarial answer probes are recorded in private/adversarial-audit.json. These check answer agreement and grader behavior; formal or executable domain verification is a separate requirement. The runtime returns a scalar reward and terminates each one-answer episode.\n')
+            (bundle/'README.md').write_text('# '+title+'\n\nRun `python environment.py` and send JSON lines: {"op":"reset","id":"problem-001"}, then {"op":"step","answer":42}.\n\nMount only learner/ in the network-isolated learner sandbox. Run environment.py on the controller (training split by default; use --split heldout only for evaluation). The learner directory contains only training prompts. Keep private/ and source evidence outside the learner. Blind same-model solution checks and adversarial answer probes are recorded in private/adversarial-audit.json. These check answer agreement and grader behavior; formal or executable domain verification is a separate requirement. The runtime returns a scalar reward and terminates each one-answer episode.\n')
             with zipfile.ZipFile(folder/'environment.zip','w',zipfile.ZIP_DEFLATED) as z:
                 if (folder/'source-evidence.zip').exists():z.write(folder/'source-evidence.zip','source-evidence.zip',compress_type=zipfile.ZIP_STORED)
                 for p in bundle.rglob('*'):

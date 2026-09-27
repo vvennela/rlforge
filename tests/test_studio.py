@@ -35,7 +35,9 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
     p=tmp_path/s['id']/'environment'
     rows=json.loads((p/'private/problems.json').read_text());assert sum(r['split']=='heldout' for r in rows)==4
     public=json.loads((p/'tasks.json').read_text());assert 'reference_answer' not in public[0]
-    assert (p/'learner/tasks.json').exists()
+    assert len(json.loads((p/'learner/tasks.json').read_text()))==16
+    assert len(json.loads((p/'evaluation/tasks.json').read_text()))==4
+    assert s['manifest']['runtime_audit']['cross_split_access_blocked']
     audit=json.loads((p/'private/adversarial-audit.json').read_text());assert all(a['passed'] for a in audit)
     assert s['manifest']['adversarial_cases']>=80
     result=subprocess.run([sys.executable,str(p/'environment.py')],input='{"op":"reset","id":"problem-001"}\n{"op":"step","answer":2}\n{"op":"step","answer":2}\n',text=True,capture_output=True,check=True)

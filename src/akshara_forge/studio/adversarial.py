@@ -67,20 +67,31 @@ def check_exported_runtime(bundle, audits):
     """Exercise actual exported JSON-lines entrypoint, not just its helper."""
     import subprocess
     import sys
-    requests=[];expected=[]
-    for audit in audits:
-        for row in audit['problems']:
-            for case in row['verifier_tests']:
-                requests.extend([{'op':'reset','id':row['id']},{'op':'step','answer':case['answer']}])
-                expected.extend([None,int(case['expected_accept'])])
-    raw='\n'.join(json.dumps(r,allow_nan=False) for r in requests)+'\n'
-    proc=subprocess.run([sys.executable,str(bundle/'environment.py')],input=raw,text=True,capture_output=True,timeout=30,check=True)
-    replies=[json.loads(line) for line in proc.stdout.splitlines()]
-    if len(replies)!=len(expected):raise ValueError('Exported runtime returned incomplete test output')
-    for reply,score in zip(replies,expected):
-        if score is None:
-            if set(reply)!={'id','prompt'}:raise ValueError('Reset leaked private data')
-        elif reply!={'reward':score,'done':True}:raise ValueError('Exported reward runtime failed adversarial probe')
-    result={'passed':True,'graded_probes':len(expected)//2,'private_fields_absent_from_reset':True}
+    problems={r['id']:r for r in json.loads((bundle/'private/problems.json').read_text())}
+    total=0
+    for split in ('train','heldout'):
+        requests=[];expected=[]
+        for audit in audits:
+            for row in audit['problems']:
+                if problems[row['id']]['split']!=split:continue
+                for case in row['verifier_tests']:
+                    requests.extend([{'op':'reset','id':row['id']},{'op':'step','answer':case['answer']}])
+                    expected.extend([None,int(case['expected_accept'])])
+        raw='\n'.join(json.dumps(r,allow_nan=False) for r in requests)+'\n'
+        proc=subprocess.run([sys.executable,str(bundle/'environment.py'),'--split',split],input=raw,text=True,capture_output=True,timeout=30,check=True)
+        replies=[json.loads(line) for line in proc.stdout.splitlines()]
+        if len(replies)!=len(expected):raise ValueError('Exported runtime returned incomplete test output')
+        for reply,score in zip(replies,expected):
+            if score is None:
+                if set(reply)!={'id','prompt'}:raise ValueError('Reset leaked private data')
+            elif reply!={'reward':score,'done':True}:raise ValueError('Exported reward runtime failed adversarial probe')
+        total+=len(expected)//2
+        forbidden=next((r for r in problems.values() if r['split']!=split),None)
+        if forbidden:
+            raw=json.dumps({'op':'reset','id':forbidden['id']})+'\n'+json.dumps({'op':'step','answer':forbidden['reference_answer']})+'\n'
+            proc=subprocess.run([sys.executable,str(bundle/'environment.py'),'--split',split],input=raw,text=True,capture_output=True,timeout=30,check=True)
+            replies=[json.loads(line) for line in proc.stdout.splitlines()]
+            if len(replies)!=2 or any(set(r)!={'error'} for r in replies):raise ValueError('Runtime split isolation failed')
+    result={'passed':True,'graded_probes':total,'private_fields_absent_from_reset':True,'cross_split_access_blocked':True}
     (bundle/'private/runtime-audit.json').write_text(json.dumps(result,indent=2))
     return result
