@@ -1,4 +1,4 @@
-"""Restricted loopback frontend for the password-gated NetBird demo session."""
+"""Restricted loopback frontend for the public NetBird demo session."""
 import argparse
 import json
 import re
@@ -14,8 +14,8 @@ JOBS = re.compile(r'/api/generation/[a-f0-9]{32}(?:/(?:download|evidence|page/[1
 
 def permitted(method, path):
     if method == 'POST':
-        return path == '/api/generate'
-    return method == 'GET' and (path in ('/', '/api/studio', '/api/bridge-sample', '/renderer.js', '/viewer.js') or bool(ASSETS.fullmatch(path)) or bool(JOBS.fullmatch(path)))
+        return path in ('/api/generate', '/api/reset', '/api/step', '/api/agent')
+    return method == 'GET' and (path in ('/', '/workbench', '/api/state', '/drawing', '/drawing?task=bridge', '/drawing?task=car', '/drawing?task=turbine', '/api/studio', '/api/bridge-sample', '/renderer.js', '/viewer.js') or bool(ASSETS.fullmatch(path)) or bool(JOBS.fullmatch(path)))
 
 
 def trusted_request(host, origin, public_origin, method, upstream_host=None):

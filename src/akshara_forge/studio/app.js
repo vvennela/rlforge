@@ -1,12 +1,11 @@
 const $=id=>document.getElementById(id);
-let active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,pointer=null;
+let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,pointer=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
 const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Iterative-deepening search becomes a family of tasks. Check cost bounds, node visits, solution paths, and final answers against an exact verifier.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
 function renderCase(){
  const c=cases[active],s=evidence[active]||{};
  $('case-kicker').textContent=c.kicker;$('case-title').innerText=c.title;$('case-copy').textContent=c.copy;$('case-status').textContent=s.status||'Dataset ready';
- document.querySelectorAll('[data-case]').forEach(b=>{const on=b.dataset.case===active;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1});
  $('case-panel').setAttribute('aria-labelledby','tab-'+active);
  for(const key of Object.keys(cases))$(key+'-specimen').hidden=key!==active;
  for(const key of ['before','after']){
@@ -22,9 +21,18 @@ function renderCase(){
  $('run-detail').textContent=active==='engineering'?`${s.steps||0} / ${s.target_steps||50} training batches · ${s.reward_updates||0} batches with reward contrast`:active==='math'?'80 training updates · Qwen 2.5 7B · same frozen completion parser':'Qwen 2.5 7B · 20 held-out problems prepared';
  if(active==='engineering'){requestAnimationFrame(drawBridge)}
 }
-async function refresh(){try{const r=await fetch('/api/studio');if(!r.ok)throw Error('Status unavailable');const d=await r.json();evidence=d.evidence;const g=d.generation;document.querySelector('.provider-settings').hidden=g.can_configure===false;document.querySelector('a[href="/workbench"]').hidden=g.can_configure===false;$('provider-label').textContent=g.provider==='vultr'?'Vultr Serverless Inference':'Astra · server-side inference';$('provider-status').textContent=g.configured?g.model:'Connect inference key';renderCase()}catch(e){$('provider-status').textContent=e.message}}
-for(const b of document.querySelectorAll('[data-case]'))b.addEventListener('click',()=>{active=b.dataset.case;renderCase()});
-document.querySelector('.tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const keys=Object.keys(cases);let n=keys.indexOf(active);n=e.key==='Home'?0:e.key==='End'?2:(n+(e.key==='ArrowRight'?1:2))%3;active=keys[n];renderCase();$('tab-'+active).focus()});
+async function refresh(){try{const r=await fetch('/api/studio');if(!r.ok)throw Error('Status unavailable');const d=await r.json();evidence=d.evidence;const g=d.generation;document.querySelector('.provider-settings').hidden=g.can_configure===false;$('provider-label').textContent=g.provider==='vultr'?'Vultr Serverless Inference':'Astra · server-side inference';$('provider-status').textContent=g.configured?g.model:'Connect inference key';renderCase()}catch(e){$('provider-status').textContent=e.message}}
+function showPage(){
+ const requested=location.hash.slice(1);page=requested==='cases'?'math':(['upload',...Object.keys(cases)].includes(requested)?requested:'upload');
+ const upload=page==='upload';$('upload-page').hidden=!upload;$('cases').hidden=upload;document.querySelector('[data-upload-only]').hidden=!upload;
+ document.querySelectorAll('[data-page]').forEach(b=>{const on=b.dataset.page===page;b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1});
+ if(!upload){active=page;renderCase()}
+ document.title='AksharaForge — '+(upload?'Environment studio':'Case Study: '+page[0].toUpperCase()+page.slice(1));
+ window.scrollTo({top:0,behavior:'instant'});
+}
+for(const b of document.querySelectorAll('[data-page]'))b.addEventListener('click',()=>{location.hash=b.dataset.page});
+document.querySelector('.tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const keys=['upload',...Object.keys(cases)];let n=keys.indexOf(page);n=e.key==='Home'?0:e.key==='End'?3:(n+(e.key==='ArrowRight'?1:3))%4;location.hash=keys[n];$('tab-'+keys[n]).focus()});
+window.addEventListener('hashchange',showPage);showPage();
 function choose(file){if(!file)return;selectedFile=file;$('file-label').textContent=`${file.name} · ${(file.size/1024/1024).toFixed(2)} MB`}
 $('paper').addEventListener('change',()=>choose($('paper').files[0]));
 for(const name of ['dragenter','dragover'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.add('dragover')});
@@ -32,7 +40,7 @@ for(const name of ['dragleave','drop'])$('dropzone').addEventListener(name,e=>{e
 $('dropzone').addEventListener('drop',e=>{choose(e.dataTransfer.files[0]);$('paper').required=false});
 function jobView(s){$('job').hidden=false;const titles={extracting:'Reading your document',ocr:'Reading scanned pages',artifacts:'Extracting source artifacts',generating:'Generating the environment',ready:'Your environment is ready',failed:'Generation stopped',awaiting_connection:'Document ready'};$('job-title').textContent=titles[s.status]||s.status;$('job-count').textContent=['ocr','artifacts'].includes(s.status)?`${s.ocr_completed||0} / ${s.ocr_total||0} pages`:`${s.completed||0} / ${s.count||100} problems`;$('job-progress').style.width=s.status==='ready'?'100%':(s.status==='ocr'?Math.max(3,25*(s.ocr_completed||0)/(s.ocr_total||1)):s.status==='artifacts'?25:Math.max(3,(s.ocr?25:0)+(s.ocr?75:100)*(s.completed||0)/(s.count||100)))+'%';$('job-message').textContent=s.message||(s.status==='ready'?'Source-linked problems, training splits, and an executable reward checker. Review the reference answers before training.':'Extracting source evidence and building checkable tasks.');$('download').hidden=!s.download;if(s.download){$('download').href=s.download;$('download').download='environment.zip'}if(s.ocr){$('ocr-result').hidden=false;$('ocr-pages').textContent=s.ocr.pages+' pages';$('ocr-strips').textContent=s.ocr.strips+' strips';$('ocr-artifacts').textContent=s.ocr.artifacts+' artifacts';$('ocr-method').textContent=Object.entries(s.ocr.methods).map(([k,v])=>(k==='tesseract'?'OCR':'Native text')+': '+v+' pages').join(' · ')+' · 200 DPI · source hashes recorded';$('ocr-download').href=s.ocr.download;if($('ocr-page').getAttribute('src')!==s.ocr.preview)$('ocr-page').src=s.ocr.preview}if(s.preview){$('job-preview').replaceChildren();for(const p of s.preview){const el=document.createElement('p');el.textContent=p.prompt;$('job-preview').append(el)}tex()}}
 $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);jobView(s);while(['extracting','ocr','artifacts','generating'].includes(s.status)){await new Promise(r=>setTimeout(r,1500));const poll=await fetch('/api/generation/'+s.id);if(!poll.ok)throw Error('Generation status unavailable');s=await poll.json();jobView(s)}}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
-function drawBridge(){if(renderer&&bridgeState&&active==='engineering')renderer.render(bridgeState,camera)}
+function drawBridge(){if(renderer&&bridgeState&&page==='engineering')renderer.render(bridgeState,camera)}
 async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
 $('bridge').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge').setPointerCapture(e.pointerId)});
 $('bridge').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
@@ -48,7 +56,7 @@ $('provider-form').addEventListener('submit',async e=>{e.preventDefault();const 
 
 // Reveal each section once; live score refreshes never restart the animation.
 if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
- const revealTargets=document.querySelectorAll('.intro, main .section-label, #upload-form, .tabs, .case-heading, .case-copy, .metrics, .comparison, .specimen, .case-foot, .method-row, main footer');
+ const revealTargets=document.querySelectorAll('.intro, main .section-label, #upload-form, .case-heading, .case-copy, .metrics, .comparison, .specimen, .case-foot, .method-row, main footer');
  const revealObserver=new IntersectionObserver(entries=>{
   for(const entry of entries)if(entry.isIntersecting){entry.target.classList.add('revealed');revealObserver.unobserve(entry.target)}
  },{threshold:0.08,rootMargin:'0px 0px -28px 0px'});

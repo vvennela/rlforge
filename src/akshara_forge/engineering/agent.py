@@ -2,6 +2,7 @@
 import json,time,hashlib,os
 from pathlib import Path
 import httpx
+from ..studio.generation import settings
 
 SYSTEM='''You control a brick assembly environment. Return JSON only: {"actions":[...]}. Available actions: {"tool":"move","id":"example_brick","x":4,"y":0,"z":0,"rotation":0}, {"tool":"remove","id":"example_brick"}, or {"tool":"place","brick":{"id":"new1","part":"plate_2x2","x":0,"y":0,"z":6,"rotation":0}}. Coordinates x,y are studs; z is plate heights. Use only the supplied palette, integer coordinates and rotations 0/90. The goal is all geometry checks passing without collisions. Inspect the actual bricks and reward diagnostics. Make minimal corrections. Do not output explanatory prose. At most 32 actions per response.'''
 
@@ -9,7 +10,7 @@ def configuration():
  provider=os.environ.get('AKSHARA_AGENT_PROVIDER','ollama')
  if provider not in ['ollama','vultr']:raise ValueError('Unknown agent provider')
  model=os.environ.get('AKSHARA_AGENT_MODEL') or ('qwen3.8-27b' if provider=='vultr' else 'qwen2.5:7b-instruct')
- return {'provider':provider,'model':model,'configured':provider=='ollama' or bool(os.environ.get('VULTR_INFERENCE_API_KEY'))}
+ return {'provider':provider,'model':model,'configured':provider=='ollama' or bool(settings()['key'])}
 
 def repair(env,output:Path,model=None,rounds=3):
  config=configuration();provider=config['provider'];model=model or config['model']
@@ -18,12 +19,13 @@ def repair(env,output:Path,model=None,rounds=3):
  if not 1<=rounds<=8:raise ValueError('1..8 rounds')
  receipt={'agent_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'model':model,'provider':provider,'kind':'inference_time_repair','weights_updated':False,'rounds_limit':rounds,'episode':env.episode,'temperature':0,'num_predict':1024,'num_ctx':8192,'initial_score':env.observe()['evaluation']}
  with httpx.Client(timeout=180) as c:
-  headers={'Authorization':'Bearer '+os.environ['VULTR_INFERENCE_API_KEY']} if provider=='vultr' else {}
+  headers={'Authorization':'Bearer '+settings()['key']} if provider=='vultr' else {}
   if provider=='vultr':
    catalog=c.get('https://api.vultrinference.com/v1/models',headers=headers);catalog.raise_for_status()
    selected=next((m for m in catalog.json()['data'] if m['id']==model),None)
    if selected is None:raise ValueError('Configured model is absent from the Vultr model catalog')
    receipt['model_inventory']=selected
+   receipt['num_predict']=4096
    receipt['num_ctx']=None  # Hosted context limit is catalog-defined; no local 8192-token setting.
   else:
    inventory=c.get('http://127.0.0.1:11434/api/tags');inventory.raise_for_status();receipt['model_inventory']=inventory.json()
@@ -37,7 +39,7 @@ def repair(env,output:Path,model=None,rounds=3):
    url='http://127.0.0.1:11434/api/chat'
    if provider=='vultr':
     url='https://api.vultrinference.com/v1/chat/completions'
-    request={'model':model,'stream':False,'messages':messages,'temperature':0,'max_tokens':1024}
+    request={'model':model,'stream':False,'messages':messages,'temperature':0,'max_tokens':4096}
     (output/f'{n:02}-request.json').write_text(json.dumps(request,indent=2))
    response=c.post(url,json=request,headers=headers);response.raise_for_status();raw=response.json()
    (output/f'{n:02}-response.json').write_text(json.dumps(raw,indent=2))

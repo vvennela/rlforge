@@ -71,7 +71,7 @@ function display(s) {
   Object.entries(E.checks).forEach(([k,v])=>{let e=document.createElement('span');e.className='check'+(v?'':' bad');e.textContent=(v?'✓ ':'× ')+k.replaceAll('_',' ');checks.append(e)});
   document.getElementById('details').textContent=JSON.stringify(E,null,2);
   document.querySelectorAll('button[data-mutation]').forEach(b=>b.disabled=s.busy);
-  const agentButton=document.getElementById('run-agent');agentButton.disabled=s.busy||s.agent?.configured===false;agentButton.textContent=s.agent?.configured===false?'Inference key needed':'Run Qwen repair';draw();
+  const agentButton=document.getElementById('run-agent');agentButton.disabled=s.busy||s.agent?.configured===false;agentButton.textContent=s.agent?.configured===false?'Inference key needed':'Run '+(s.agent?.model||'agent')+' repair';draw();
 }
 async function act(url,data){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const s=await r.json();if(!r.ok)throw Error(s.error);display(s)}catch(e){document.getElementById('error').textContent=e.message}}
 function reset(mode){act('/api/reset',{mode,task:document.getElementById('task-choice').value})}

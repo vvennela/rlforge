@@ -12,7 +12,8 @@ def main():
  if not a.drawing.is_file():p.error('Drawing file missing')
  studio=Studio(a.runs)
  tasks={'bridge':BRIDGE,**LIBRARY};intake=a.drawing.resolve().parent.parent
- lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None,'agent':configuration()}
+ lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'reference — scripted fixture','busy':False,'error':None,'agent':configuration()}
+ env.step([{'tool':'place','brick':b} for b in reference(env.task)],actor='scripted_fixture')
  class Handler(BaseHTTPRequestHandler):
   def log_message(self,*args):pass
   def send(self,data,status=200,ctype='application/json'):
@@ -30,7 +31,7 @@ def main():
     drawing=a.drawing if key=='bridge' else intake/tasks[key]['source_id']/'preview.jpg'
     return self.send(drawing.read_bytes(),ctype='image/jpeg')
    if self.path=='/api/state':
-    with lock:return self.send({**env.observe(),**state})
+    with lock:return self.send({**env.observe(),**state,'agent':configuration()})
    self.send({'error':'Not found'},404)
   def do_POST(self):
    nonlocal env
@@ -63,7 +64,7 @@ def main():
       agent=configuration()
       if not agent['configured']:raise ValueError('Configure the Vultr Serverless Inference API key before running an agent')
       if env.done:raise ValueError('Load the damaged fixture or reset before running the agent')
-      state.update(busy=True,mode=agent['model']+' · inference-time repair',error=None)
+      state.update(agent=agent,busy=True,mode=agent['model']+' · inference-time repair',error=None)
       def run():
        try:repair(env,a.runs/'agents'/env.episode)
        except Exception as exc:state['error']=str(exc)[:300]

@@ -3,9 +3,13 @@ from akshara_forge.studio.public_gateway import permitted, trusted_request
 
 def test_judge_can_upload_and_download_but_cannot_change_provider():
     assert permitted('POST', '/api/generate')
+    assert permitted('POST', '/api/agent')
+    assert permitted('GET', '/workbench')
+    assert permitted('GET', '/drawing?task=bridge')
+    assert not permitted('GET', '/drawing?task=../../secret')
     assert permitted('GET', '/api/generation/'+'a'*32+'/evidence')
     assert permitted('GET', '/studio/vendor/katex/fonts/KaTeX_Main-Regular.woff2')
-    for method, path in [('POST','/api/provider'), ('POST','/api/agent'), ('GET','/workbench'), ('GET','/api/models'), ('GET','/api/generation/../../secret')]:
+    for method, path in [('POST','/api/provider'), ('GET','/api/models'), ('GET','/api/generation/../../secret')]:
         assert not permitted(method, path)
 
 

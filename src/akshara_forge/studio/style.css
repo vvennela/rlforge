@@ -8,3 +8,14 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.scroll-reveal{opacity:1;transform:none;transition:none}.track i,.fill{transition:none}}
 
 #ocr-result{margin:18px 0;padding:16px;border:1px solid var(--line);background:#10120d}.ocr-summary{display:flex;gap:18px;flex-wrap:wrap;color:var(--accent);font-size:13px}#ocr-method{font:10px/1.7 'Courier New',monospace;color:var(--muted)}#ocr-download{display:inline-block;margin:8px 0 12px;color:var(--accent)}#ocr-result summary{cursor:pointer;color:var(--muted)}#ocr-page{display:block;width:100%;max-height:600px;object-fit:contain;margin-top:14px;background:#fff}
+
+/* Header navigation selects a page while keeping upload jobs alive. */
+main>header{height:auto;min-height:100px;display:block;padding:20px 24px 0;position:sticky;top:0;z-index:10;background:rgba(8,8,8,.96);backdrop-filter:blur(14px)}
+main>header>span{display:block;padding:0 12px;font-size:9px}
+.header-tabs{padding:0;border-bottom:0;margin-top:8px;overflow-x:auto}
+.header-tabs button{padding:15px 12px;font-size:11px}
+.header-tabs button:first-child{flex:.6}
+#upload-page,#cases{animation:page-enter .45s ease both}
+@keyframes page-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){main>header{padding:14px 12px 0;min-height:86px}.header-tabs button{font-size:9px;padding:14px 8px}main>header>span{font-size:8px}}
+@media(prefers-reduced-motion:reduce){#upload-page,#cases{animation:none}}

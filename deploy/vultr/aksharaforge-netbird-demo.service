@@ -1,5 +1,5 @@
 [Unit]
-Description=Password-gated AksharaForge NetBird demo session
+Description=Public AksharaForge NetBird demo session
 After=netbird.service aksharaforge-public-gateway.service
 Requires=netbird.service
 BindsTo=aksharaforge-public-gateway.service aksharaforge.service

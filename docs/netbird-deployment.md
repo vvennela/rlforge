@@ -1,8 +1,8 @@
 # NetBird demo deployment
 
-The app runs on Vultr at 127.0.0.1:8787. The restricted judge frontend runs on the private NetBird address at
-100.81.229.176:8789 and permits studio assets, uploads, job polling, and downloads.
-Provider configuration and engineering control endpoints remain operator-only.
+The app runs on Vultr at 127.0.0.1:8787. The restricted public frontend runs on the private NetBird address at
+100.81.229.176:8789 and permits studio assets, uploads, job polling, downloads, and sandboxed
+engineering workspace controls. Provider configuration remains operator-only.
 The existing SSH tunnel continues to provide operator access.
 
 ## Infrastructure
@@ -28,9 +28,9 @@ keep the management API token private. Never expose an unclaimed setup page.
 
 ## Demo lifecycle
 
-Store a randomly generated password (at least 16 characters) in
-/etc/aksharaforge-netbird-demo.password, root-only mode 0600. This credential
-represents the hackathon judge role; it does not grant provider administration.
+The demo is public without a password, as requested by the owner. The management
+console still requires owner authentication. This configuration does not claim the
+competition’s gated-access bonus criterion.
 Install the two service units and start aksharaforge-netbird-demo.service once
 NetBird is connected. The wrapper records the exact generated HTTPS origin in
 /run/aksharaforge-demo/session.json; the frontend rejects requests until that is
@@ -45,8 +45,8 @@ at boot and do not change any AWS training time or cost limits.
 
 ## Verified deployment (2026-09-27)
 
-- Valid HTTPS certificate and unauthenticated password gate from the public URL.
-- Judge login reaches the studio and live case-study evidence.
+- Valid HTTPS certificate; the studio and workbench open without authentication.
+- Header tabs switch between Upload, Math, Coding, and Engineering pages.
 - Scanned upload verification is recorded with the deployment evidence.
 - Public POST /api/provider is rejected; local operator flow still works.
 - Direct public connections to application ports fail.
@@ -56,8 +56,17 @@ Sources:
 - https://docs.netbird.io/selfhosted/selfhosted-quickstart
 - https://docs.netbird.io/manage/reverse-proxy/expose-from-cli
 
-Current session URL and private judge-password file are recorded outside Git in
+Current session URL and authentication mode are recorded outside Git in
 `runs/vultr/netbird/public-demo.json`. Owner credentials are stored separately in
 `runs/vultr/netbird/owner-credentials.json` (0600). The gateway bind address is set
 in `/etc/aksharaforge-netbird-gateway.env`. If the peer is re-enrolled with a new
 NetBird IP, update that file before restarting the gateway.
+
+## Inference
+
+The generation pipeline and workspace agent use Vultr Serverless Inference, model
+`glm-5.3`. The shared key is stored outside Git in
+`/var/lib/aksharaforge/inference.json`, mode 0600, owned by the application user.
+`AKSHARA_INFERENCE_CONFIG` points to it. Only the loopback operator interface can
+change it. Both source-linked generation and a sandboxed bridge repair were
+verified with live calls. Qwen GPU training retains its frozen model and protocol.

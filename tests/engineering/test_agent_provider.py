@@ -26,3 +26,14 @@ def test_vultr_identity_and_secret_handling(monkeypatch,tmp_path,returned_model,
 def test_missing_key_fails_before_rollout(monkeypatch,tmp_path):
  monkeypatch.setenv('AKSHARA_AGENT_PROVIDER','vultr');monkeypatch.delenv('VULTR_INFERENCE_API_KEY',raising=False)
  with pytest.raises(ValueError,match='not configured'):agent.repair(Episode(),tmp_path)
+
+
+def test_agent_uses_shared_server_secret(monkeypatch,tmp_path):
+ config=tmp_path/'inference.json'
+ config.write_text(json.dumps({'provider':'vultr','model':'glm-5.3','key':'shared-private-key'}))
+ monkeypatch.setenv('AKSHARA_INFERENCE_CONFIG',str(config))
+ monkeypatch.setenv('AKSHARA_AGENT_PROVIDER','vultr')
+ monkeypatch.setenv('AKSHARA_AGENT_MODEL','glm-5.3')
+ monkeypatch.delenv('VULTR_INFERENCE_API_KEY',raising=False)
+ assert agent.configuration()=={'provider':'vultr','model':'glm-5.3','configured':True}
+ assert 'shared-private-key' not in json.dumps(agent.configuration())
