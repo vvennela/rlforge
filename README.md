@@ -8,7 +8,7 @@ RLForge connects document extraction, task generation, sandboxed execution, rewa
 
 - **Mathematics:** After 80 training updates, Qwen improved from **2/20 to 5/20** on the same held-out paper-derived questions: **+15 percentage points**. Ten questions use exact-answer checks; ten use teacher-graded proofs.
 - **Engineering:** An eight-turn LEGO bridge environment returns feedback on geometry, collisions, and connectivity. After 50 batches, successful repairs rose **3/20 → 7/20 (+20pp)**; mean geometry overlap rose **36.7% → 71.1%**.
-- **Coding:** Qwen writes IDA* search implementations for execution in isolated containers. Its frozen suite includes GLM-generated adversarial cases, independent reference checks, and mutation testing. Baseline evaluation is running before 80 training batches and paired evaluation.
+- **Coding:** Qwen writes IDA* search implementations for execution in isolated containers. Its frozen suite includes GLM-generated adversarial cases, independent reference checks, and mutation testing. The baseline completed at **0/20**; 80 training batches and paired evaluation are underway.
 
 Training traces, checkpoints, and evaluation protocols make each result inspectable. Held-out tasks stay separate from training; final scores compare identical evaluation conditions.
 
