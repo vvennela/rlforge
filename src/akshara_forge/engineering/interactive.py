@@ -128,6 +128,7 @@ def serve(dataset,output,token_file,port):
         def log_message(self,*args):pass
         def do_POST(self):
             if self.path!='/step' or not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+token):self.send_error(403);return
+            req={}
             try:
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<100000:raise ValueError('Invalid request length')
@@ -139,7 +140,10 @@ def serve(dataset,output,token_file,port):
                 with lock:
                     with (output/'requests.jsonl').open('a') as f:f.write(json.dumps({**req,'result':result})+'\n')
                 self.send_response(200);self.end_headers();self.wfile.write(json.dumps(result).encode())
-            except Exception as exc:self.send_response(500);self.end_headers();self.wfile.write(json.dumps({'error':str(exc)}).encode())
+            except Exception as exc:
+                with lock:
+                    with (output/'failures.jsonl').open('a') as f:f.write(json.dumps({'request':req,'error':str(exc)})+'\n')
+                self.send_response(500);self.end_headers();self.wfile.write(json.dumps({'error':str(exc)}).encode())
     write(output/'ready.json',{'port':port,'manifest':json.loads((Path(dataset)/'manifest.json').read_text())})
     ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
 

@@ -5,7 +5,7 @@ context, never training labels. Each batch contains two complete eight-turn
 attempts from the same initial state; weights stay fixed during collection.
 """
 from __future__ import annotations
-import argparse, hashlib, json, os, time
+import argparse, hashlib, json, os, shutil, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import httpx
@@ -22,13 +22,43 @@ def remote(row,history,phase):
                 r=c.post(os.environ['AKSHARA_ENGINEERING_REWARD_URL']+'/step',headers={'Authorization':'Bearer '+token},
                          json={'id':row['id'],'history':history,'phase':phase})
                 r.raise_for_status();return r.json()
-        except (httpx.TransportError,) as exc:
+        except (httpx.TransportError,httpx.HTTPStatusError) as exc:
+            if isinstance(exc,httpx.HTTPStatusError) and exc.response.status_code not in (500,502,503,504):raise
+            print(json.dumps({'event':'reward_service_retry','attempt':attempt+1,'task':row['id'],
+                'error':str(exc),'response':exc.response.text[:500] if isinstance(exc,httpx.HTTPStatusError) else None}),flush=True)
             if attempt==2:raise
             time.sleep(2)
 
 
 def append(path,value):
     with Path(path).open('a') as f:f.write(json.dumps(value,allow_nan=False)+'\n')
+
+
+def resume_evidence(checkpoint,output,protocol,step):
+    """Preserve the parent run and carry forward only evidence through the checkpoint."""
+    parent=checkpoint.parent
+    previous=json.loads((parent/'protocol.json').read_text())
+    for key,value in protocol.items():
+        if key!='source_hashes' and previous.get(key)!=value:
+            raise ValueError('Resume protocol differs: '+key)
+    for name in ('adapter_model.safetensors','optimizer.pt'):
+        if not (checkpoint/name).is_file():raise ValueError('Incomplete checkpoint: '+name)
+    records=[json.loads(l) for l in (parent/'optimizer-events.jsonl').read_text().splitlines()]
+    records=[r for r in records if r['step']<=step]
+    if [r['step'] for r in records]!=list(range(1,step+1)):raise ValueError('Checkpoint history is incomplete')
+    baseline=json.loads((parent/'before/summary.json').read_text())
+    if not baseline['complete']:raise ValueError('Original baseline is incomplete')
+    traces=(parent/'training-traces.jsonl').read_text().splitlines()[:step*2]
+    if len(traces)!=step*2:raise ValueError('Checkpoint trajectories are incomplete')
+    shutil.copytree(parent/'before',output/'before')
+    shutil.copy2(parent/'initial-adapter.pt',output/'initial-adapter.pt')
+    (output/'optimizer-events.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in records))
+    (output/'training-traces.jsonl').write_text('\n'.join(traces)+'\n')
+    write(output/'resumption.json',{'checkpoint':str(checkpoint),'completed_step':step,
+        'next_step':step+1,'restored':['adapter','optimizer','torch_rng','cuda_rng'],
+        'parent_evidence_preserved':True,'checkpoint_sha256':{n:hashlib.sha256((checkpoint/n).read_bytes()).hexdigest()
+        for n in ('adapter_model.safetensors','optimizer.pt')}})
+    return baseline['records'],records[-1]['reward_contrast_updates']
 
 
 def trajectories(model,tokenizer,rows,phase,sample,output):
@@ -108,7 +138,8 @@ def policy_objective(logp,reference,advantage,normalizer):
 def run(args):
     import torch
     from transformers import AutoModelForCausalLM,AutoTokenizer,set_seed
-    from peft import get_peft_model,LoraConfig
+    from peft import get_peft_model,LoraConfig,set_peft_model_state_dict
+    from safetensors.torch import load_file
     if args.output.exists():raise ValueError('Choose a fresh output directory')
     args.output.mkdir(parents=True)
     manifest=json.loads((args.dataset/'manifest.json').read_text())
@@ -133,19 +164,32 @@ def run(args):
     model=get_peft_model(base,LoraConfig(r=8,lora_alpha=16,lora_dropout=0.,target_modules=['q_proj','v_proj'],task_type='CAUSAL_LM'))
     model.enable_input_require_grads();model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant':False})
     initial={n:p.detach().cpu().clone() for n,p in model.named_parameters() if p.requires_grad}
-    torch.save(initial,args.output/'initial-adapter.pt')
+    optimizer=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=1e-5,weight_decay=0.)
+    effective=0;step=0
+    if args.resume:
+        state=torch.load(args.resume/'optimizer.pt',map_location='cpu',weights_only=True)
+        step=state['step']
+        if not 0<step<args.steps:raise ValueError('Resume checkpoint must precede final step')
+        before,effective=resume_evidence(args.resume,args.output,protocol,step)
+        initial=torch.load(args.output/'initial-adapter.pt',map_location='cpu',weights_only=True)
+        result=set_peft_model_state_dict(model,load_file(str(args.resume/'adapter_model.safetensors')))
+        if result.unexpected_keys:raise ValueError('Unexpected adapter keys')
+        optimizer.load_state_dict(state['optimizer'])
+        torch.set_rng_state(state['rng']);torch.cuda.set_rng_state_all(state['cuda_rng'])
+        del state
+        print(json.dumps({'event':'training_resumed','completed_step':step,'target_steps':args.steps}),flush=True)
+    else:
+        torch.save(initial,args.output/'initial-adapter.pt')
+        before=evaluation(model,tokenizer,testing,'quick' if args.stage=='quick' else 'before',args.output/'before')
     def delta():
         changed=0;squares=0.
         for n,p in model.named_parameters():
             if n in initial:
                 d=p.detach().float().cpu()-initial[n].float();changed+=int(torch.count_nonzero(d));squares+=float((d*d).sum())
         return {'changed_parameters':changed,'delta_l2':squares**.5}
-    before=evaluation(model,tokenizer,testing,'quick' if args.stage=='quick' else 'before',args.output/'before')
-    optimizer=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=1e-5,weight_decay=0.)
     schedule=quick_rows if args.stage=='quick' else sorted(training,key=lambda r:(r['difficulty'],r['id']))
-    effective=0;step=0
     try:
-        for step in range(1,args.steps+1):
+        for step in range(step+1,args.steps+1):
             started=time.time()
             index=(step-1)%len(schedule) if args.stage=='quick' or step<=len(schedule) else len(schedule)-20+(step-len(schedule)-1)%20
             row=schedule[index]
@@ -179,9 +223,9 @@ def run(args):
                 'reward_contrast_updates':effective,'episodes':[behavior(e) for e in attempts],**delta()}
             append(args.output/'optimizer-events.jsonl',record)
             print(json.dumps({k:v for k,v in record.items() if k!='episodes'}),flush=True)
-            if step%10==0 or step==args.steps:
-                target=args.output/f'checkpoint-{step}';model.save_pretrained(target);tokenizer.save_pretrained(target)
-                torch.save({'optimizer':optimizer.state_dict(),'step':step,'rng':torch.get_rng_state(),'cuda_rng':torch.cuda.get_rng_state_all()},target/'optimizer.pt')
+            # Durable complete state after every batch; no rollback of several updates on a service outage.
+            target=args.output/f'checkpoint-{step}';model.save_pretrained(target);tokenizer.save_pretrained(target)
+            torch.save({'optimizer':optimizer.state_dict(),'step':step,'rng':torch.get_rng_state(),'cuda_rng':torch.cuda.get_rng_state_all()},target/'optimizer.pt')
         after=evaluation(model,tokenizer,testing,'quick' if args.stage=='quick' else 'after',args.output/'after')
         model.save_pretrained(args.output/'adapter');tokenizer.save_pretrained(args.output/'adapter')
         summary={'stage':args.stage,'optimizer_steps':step,'reward_contrast_updates':effective,**delta(),
@@ -203,6 +247,7 @@ def run(args):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--model',type=Path,required=True);p.add_argument('--steps',type=int,required=True);p.add_argument('--stage',choices=['quick','long'],required=True)
+    p.add_argument('--resume',type=Path)
     run(p.parse_args())
 
 
