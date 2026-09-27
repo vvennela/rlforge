@@ -14,7 +14,10 @@ The independent Dijkstra tests certify the reference costs; hand-worked tests
 certify cutoff ordering and trace semantics.
 
 Candidate programs run in gVisor containers on Vultr: no network, read-only,
-unprivileged, bounded CPU/memory/output/runtime. Only inputs enter the container.
+unprivileged, bounded CPU/memory/output/runtime. The frozen wall-clock budget is
+30 seconds per program, including container startup; correct reference programs
+exposed startup jitter at the original 12-second preflight limit. The trainer
+checks the reward server’s dataset fingerprint and execution budget. Only inputs enter the container.
 Expected answers and comparisons stay on the controller. Training requests for
 held-out identifiers are rejected. The GPU receives pass fractions and records
 programs, per-test pass vectors, gradients, and adapter deltas.

@@ -9,7 +9,7 @@ def code_from(text):
     if len(code)>24000:raise ValueError('Code too long')
     return code
 
-def execute(code,inputs,timeout=12):
+def execute(code,inputs,timeout=30):
     name='forge-code-'+uuid.uuid4().hex[:12];worker=Path(__file__).with_name('worker.py').resolve()
     command=['docker','run','--rm','-i','--name',name,'--runtime=runsc','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=32','--memory=256m','--cpus=.5','--user=65534:65534','--mount',f'type=bind,source={worker},target=/worker.py,readonly','python:3.12-slim','python','-I','-B','/worker.py']
     proc=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
@@ -45,11 +45,12 @@ def grade(row,completion):
             ok=isinstance(got,dict) and set(got)=={'value'} and json.dumps(got['value'],sort_keys=True,allow_nan=False)==json.dumps(test['expected'],sort_keys=True,allow_nan=False)
         except (ValueError,TypeError,OverflowError):ok=False
         checks.append(ok)
-    return {'reward':sum(checks)/len(checks),'success':all(checks),'passed':sum(checks),'total':len(checks),'checks':checks,'error':out.get('error'),'sandbox':'gVisor / no network / read-only / unprivileged'}
+    return {'reward':sum(checks)/len(checks),'success':all(checks),'passed':sum(checks),'total':len(checks),'checks':checks,'error':out.get('error'),'sandbox':'gVisor / no network / read-only / unprivileged','wall_timeout_seconds':30}
 
 def serve(dataset,output,token_file,port):
     token=token_file.read_text().strip();output.mkdir(parents=True,exist_ok=True)
     manifest=json.loads((dataset/'manifest.json').read_text())
+    manifest_hash=hashlib.sha256((dataset/'manifest.json').read_bytes()).hexdigest()
     for split,digest in manifest['sha256'].items():
         if hashlib.sha256((dataset/f'{split}.json').read_bytes()).hexdigest()!=digest:raise ValueError('Dataset hash changed')
     rows={r['id']:r for split in ('train','heldout') for r in json.loads((dataset/f'{split}.json').read_text())};slots=threading.Semaphore(2);lock=threading.Lock()
@@ -65,6 +66,7 @@ def serve(dataset,output,token_file,port):
                 if phase=='train' and row['split']!='train':raise ValueError('Heldout leakage blocked')
                 if phase in ('before','after') and row['split']!='heldout':raise ValueError('Wrong evaluation split')
                 with slots:result=grade(row,req['completion'])
+                result['dataset_manifest_sha256']=manifest_hash
                 with lock:
                     with (output/'requests.jsonl').open('a') as f:f.write(json.dumps({'time':time.time(),**req,'result':result})+'\n')
                 raw=json.dumps(result).encode();self.send_response(200);self.end_headers();self.wfile.write(raw)

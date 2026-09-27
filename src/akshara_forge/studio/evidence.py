@@ -20,7 +20,7 @@ def engineering_sample(root,run):
     if not before or before['id']!=row['id']:return None
     if after and after['id']!=row['id']:raise ValueError('Sample pairing mismatch')
     from ..engineering.worker import PALETTE
-    return {'id':row['id'],'task':row['task'],'target':row['target'],'fixed':row['initial'],'palette':PALETTE,
+    return {'id':row['id'],'task':row['task'],'target':row['target'],'fixed':row['initial'],'initial_editable':row.get('editable_initial',[]),'palette':PALETTE,
             'before':before['state']['observation'],'after':after['state']['observation'] if after else None}
 
 def coding_sample(run):

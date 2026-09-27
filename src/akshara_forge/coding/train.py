@@ -12,7 +12,10 @@ def reward(row,text,phase):
     for attempt in range(3):
         try:
             r=httpx.post(os.environ['AKSHARA_CODING_REWARD_URL']+'/grade',headers={'Authorization':'Bearer '+token},json={'id':row['id'],'completion':text,'phase':phase},timeout=120)
-            r.raise_for_status();return r.json()
+            r.raise_for_status();result=r.json()
+            if result.get('dataset_manifest_sha256')!=os.environ['AKSHARA_CODING_MANIFEST_SHA256']:raise ValueError('Reward server dataset mismatch')
+            if result.get('wall_timeout_seconds')!=30:raise ValueError('Reward server execution budget mismatch')
+            return result
         except (httpx.TransportError,httpx.HTTPStatusError) as exc:
             if isinstance(exc,httpx.HTTPStatusError) and exc.response.status_code<500:raise
             if attempt==2:raise
@@ -60,11 +63,12 @@ def run(args):
     if args.output.exists() and not args.resume:raise ValueError('Fresh output required')
     args.output.mkdir(parents=True,exist_ok=True)
     manifest=json.loads((args.dataset/'manifest.json').read_text())
+    os.environ['AKSHARA_CODING_MANIFEST_SHA256']=hashlib.sha256((args.dataset/'manifest.json').read_bytes()).hexdigest()
     for split,digest in manifest['sha256'].items():
         if hashlib.sha256((args.dataset/f'{split}.json').read_bytes()).hexdigest()!=digest:raise ValueError('Dataset changed')
     training=json.loads((args.dataset/'train.json').read_text());heldout=json.loads((args.dataset/'heldout.json').read_text())
     if {r['id'] for r in training}&{r['id'] for r in heldout}:raise ValueError('Split overlap')
-    protocol={'model':str(args.model),'manifest':manifest,'steps':args.steps,'group_size':4,'max_tokens':1536,'seed':20260929,'temperature':.8,'top_p':.95,'top_k':0,'learning_rate':2e-5,'kl':.01,'lora_rank':8,'lora_alpha':16,'modules':['q_proj','v_proj'],'precision':'bfloat16','algorithm':'Group-relative REINFORCE with leave-one-out rewards and sampled KL penalty','reward':f"Fraction of {manifest['tests_per_task']} sandboxed tests passed",'evaluation':'20 frozen specifications; greedy, same 1536-token budget before and after','selection':'Final fixed-step adapter only; no holdout checkpoint selection','source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    protocol={'model':str(args.model),'manifest':manifest,'steps':args.steps,'group_size':4,'sandbox_wall_timeout_seconds':30,'max_tokens':1536,'seed':20260929,'temperature':.8,'top_p':.95,'top_k':0,'learning_rate':2e-5,'kl':.01,'lora_rank':8,'lora_alpha':16,'modules':['q_proj','v_proj'],'precision':'bfloat16','algorithm':'Group-relative REINFORCE with leave-one-out rewards and sampled KL penalty','reward':f"Fraction of {manifest['tests_per_task']} sandboxed tests passed",'evaluation':'20 frozen specifications; greedy, same 1536-token budget before and after','selection':'Final fixed-step adapter only; no holdout checkpoint selection','source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     if args.resume:
         if json.loads((args.output/'protocol.json').read_text())!=protocol:raise ValueError('Resume protocol changed')
     else:write(args.output/'protocol.json',protocol)

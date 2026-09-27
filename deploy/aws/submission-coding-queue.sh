@@ -9,8 +9,13 @@ mkdir -p coding/runs
 trap 'code=$?; /usr/bin/python3 -c "import json,time;json.dump(dict(exit_code=$code,finished_at=time.time()),open(\"coding/queue-exit.json\",\"w\"))"' EXIT
 while systemctl is-active --quiet aksharaforge-interactive.service; do sleep 20; done
 /usr/bin/python3 - <<'PY'
-import json
+import json,hashlib
 from pathlib import Path
+preflight=json.loads(Path('coding/preflight-v3.json').read_text())
+assert preflight['passed'] and preflight['heldout_train_blocked']
+fingerprint=hashlib.sha256(Path('coding/dataset-v3/manifest.json').read_bytes()).hexdigest()
+assert all(c['result']['dataset_manifest_sha256']==fingerprint for c in preflight['checks'])
+assert all(c['result']['wall_timeout_seconds']==30 for c in preflight['checks'])
 root=Path('runs/long-004')
 d=json.loads((root/'completion.json').read_text())
 assert d['optimizer_steps']==50 and d['total']==20
