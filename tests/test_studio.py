@@ -200,3 +200,41 @@ def test_malformed_provider_json_retries_identical_blind_prompt_and_retains_rece
     assert requests[0]==requests[1]
     assert (tmp_path/'parse-error.json').exists()
     assert (tmp_path/'response.json').exists() and (tmp_path/'json-retry/response.json').exists()
+
+
+def test_upload_keeps_validated_items_and_only_replaces_rejected_ones(tmp_path,monkeypatch):
+    monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
+    monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
+    counts=[];drafts=[0]
+    def provider(prompt,folder,*,system=g.SYSTEM,json_prefix=False):
+        request=json.loads(prompt)
+        if system!=g.SYSTEM:
+            return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition',
+                'reference_answer':int(r['prompt'].split()[1])+1,
+                'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong'} for a in [-1,-2,-3]]} for r in request['problems']]}
+        drafts[0]+=1;n=int(request['request'].split()[1]);counts.append(n)
+        return {'problems':[{'prompt':f'Compute {drafts[0]*100+i} + 1','source_quote':'Addition','solution_outline':'Add one.',
+            'reference_answer':0 if drafts[0]==1 and i==3 else drafts[0]*100+i+1,
+            'verification':'numeric','tolerance':0} for i in range(n)]}
+    monkeypatch.setattr(g,'call_model',provider)
+    jobs=g.GenerationJobs(tmp_path);s=jobs.start({'filename':'source.txt','data':base64.b64encode(b'Addition').decode(),'count':20})
+    for _ in range(200):
+        s=jobs.read(s['id'])
+        if s['status'] in ('ready','failed'):break
+        time.sleep(.01)
+    assert s['status']=='ready',s
+    assert counts==[10,1,10]
+    root=tmp_path/s['id'];rows=json.loads((root/'environment/private/problems.json').read_text())
+    assert [r['id'] for r in rows]==[f'problem-{i:03}' for i in range(1,21)]
+    assert rows[0]['reference_answer']==101 and rows[3]['reference_answer']==201
+    assert sum(r['split']=='train' for r in rows)==16
+    original=json.loads((root/'calls/00/attempt-1/audit.json').read_text())
+    assert not original['passed']
+    published=json.loads((root/'environment/private/adversarial-audit.json').read_text())
+    assert all(r['passed'] for a in published for r in a['problems'])
+    assert published[0]['problems'][0]['review_evidence']=='private/reviews/calls/00/attempt-1/audit.json'
+    assert published[0]['problems'][3]['review_evidence']=='private/reviews/calls/00/attempt-2/audit.json'
+
+    for audit in published:
+        for item in audit['problems']:
+            assert (root/'environment'/item['review_evidence']).is_file()

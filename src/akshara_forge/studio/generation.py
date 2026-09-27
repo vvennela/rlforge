@@ -164,37 +164,56 @@ class GenerationJobs:
             rows=[];audits=[];title=name
             model_call=partial(call_model,json_prefix=True)
             for offset in range(0,count,10):
-                feedback=None
-                for attempt in range(1,4):
+                feedback=None;accepted={};accepted_checks={}
+                batch_ids=[f'problem-{index:03}' for index in range(offset+1,offset+11)]
+                for attempt in range(1,6):
+                    pending=[id for id in batch_ids if id not in accepted]
                     call_folder=folder/f'calls/{offset//10:02}/attempt-{attempt}'
-                    packet=None
+                    packet=None;batch=None;audit=None;error=None
                     try:
-                        packet=model_call(json.dumps({'request':f'Generate 10 distinct problems for batch {offset//10+1}.',
-                            'source_passages':passages(source),'source_artifacts':source_artifacts,'previous_prompts':[r['prompt'] for r in rows],
+                        packet=model_call(json.dumps({'request':f'Generate {len(pending)} distinct problems for batch {offset//10+1}.',
+                            'source_passages':passages(source),'source_artifacts':source_artifacts,
+                            'previous_prompts':[r['prompt'] for r in rows+list(accepted.values())],
                             'revision_feedback':feedback}),call_folder)
-                        batch=validate(packet,source,10)
-                        if len({r['prompt'] for r in rows+batch})!=len(rows)+len(batch):raise ValueError('Duplicate problem statements detected.')
-                        for index,r in enumerate(batch,len(rows)+1):
-                            r['id']=f'problem-{index:03}';r['split']='train' if index<=count*4//5 else 'heldout'
-                        self.status(folder,status='reviewing',completed=len(rows),title=packet.get('title',name),message='Independently solving problems and testing adversarial answers.')
+                        batch=validate(packet,source,len(pending))
+                        all_rows=rows+list(accepted.values())+batch
+                        if len({r['prompt'] for r in all_rows})!=len(all_rows):raise ValueError('Duplicate problem statements detected.')
+                        for id,r in zip(pending,batch,strict=True):
+                            r['id']=id;r['split']='train' if int(id.split('-')[1])<=count*4//5 else 'heldout'
+                        self.status(folder,status='reviewing',completed=len(rows)+len(accepted),title=packet.get('title',name),message='Independently solving problems and testing adversarial answers.')
                         from .adversarial import review
                         audit=review(batch,source,call_folder,model_call)
                     except ValueError as exc:
-                        call_folder.mkdir(parents=True,exist_ok=True)
-                        rejection={'attempt':attempt,'error':str(exc)}
-                        (call_folder/'rejection.json').write_text(json.dumps(rejection,indent=2))
-                        if attempt==3:raise
-                        feedback={'error':str(exc),'rejected_packet':packet,
-                            'instruction':'Replace or correct the rejected batch. Select an existing source passage ID; do not invent or repair source symbols. Fully specify new finite worked examples. Do not lower verification requirements.'}
+                        error=str(exc);call_folder.mkdir(parents=True,exist_ok=True)
+                        (call_folder/'rejection.json').write_text(json.dumps({'attempt':attempt,'error':error},indent=2))
                         audit_file=call_folder/'audit.json'
-                        if audit_file.exists():
-                            audit=json.loads(audit_file.read_text())
-                            feedback['review_failures']=[{'id':r['id'],'failures':r['failures'],'review_reason':r['independent_solution'].get('reason')} for r in audit['problems'] if not r['passed']]
-                        self.status(folder,status='generating',message=f'Revising rejected batch {offset//10+1} (attempt {attempt+1} of 3).')
-                        continue
-                    rows.extend(batch);audits.append(audit);title=packet.get('title',name)
-                    self.status(folder,status='generating',completed=len(rows),reviewed=len(rows),title=title)
-                    break
+                        if audit_file.exists():audit=json.loads(audit_file.read_text())
+                    # An accepted item retains its own full independent review and probes.
+                    # Failed items never enter the package; a later failure cannot erase
+                    # or silently substitute a previously validated reference answer.
+                    if batch is not None and audit is not None:
+                        checked={r['id']:r for r in audit['problems']}
+                        for row in batch:
+                            check=checked.get(row['id'])
+                            if check and check['passed']:
+                                accepted[row['id']]=row
+                                accepted_checks[row['id']]={**check,'review_evidence':str(Path('private/reviews')/call_folder.relative_to(folder)/'audit.json')}
+                        (call_folder/'accepted-ids.json').write_text(json.dumps([r['id'] for r in batch if r['id'] in accepted]))
+                    if len(accepted)==10:
+                        rows.extend(accepted[id] for id in batch_ids)
+                        audits.append({'method':'blind GLM solution cross-check plus adversarial verifier probes',
+                            'scope':'Separate calls to the same model; agreement is not a mathematical proof.',
+                            'passed':True,'problems':[accepted_checks[id] for id in batch_ids]})
+                        title=packet.get('title',name)
+                        self.status(folder,status='generating',completed=len(rows),reviewed=len(rows),title=title)
+                        break
+                    if attempt==5:raise ValueError(error or 'Generation could not produce a fully verified batch.')
+                    feedback={'error':error,'rejected_packet':{'problems':[r for r in (batch or []) if r.get('id') not in accepted]},
+                        'instruction':'Generate only the requested number of replacements for rejected problems. Previously accepted problems are fixed. Select an existing source passage ID and fully specify finite worked examples. Do not lower verification requirements.'}
+                    if audit:
+                        feedback['review_failures']=[{'id':r['id'],'failures':r['failures'],'review_reason':r['independent_solution'].get('reason')} for r in audit['problems'] if not r['passed']]
+                    self.status(folder,status='generating',completed=len(rows)+len(accepted),reviewed=len(rows)+len(accepted),
+                        message=f'Retained {len(accepted)} verified problems; replacing {10-len(accepted)} rejected problems in batch {offset//10+1} (attempt {attempt+1} of 5).')
             if len({r['prompt'] for r in rows})!=count:raise ValueError('Duplicate problem statements detected.')
             bundle=folder/'environment';(bundle/'private').mkdir(parents=True)
             (bundle/'private/problems.json').write_text(json.dumps(rows,indent=2))
@@ -202,6 +221,9 @@ class GenerationJobs:
             (bundle/'environment.py').write_text(RUNTIME)
             (bundle/'verifier.py').write_text(Path(__file__).with_name('verifier.py').read_text())
             (bundle/'private/adversarial-audit.json').write_text(json.dumps(audits,indent=2))
+            for receipt in (folder/'calls').glob('**/audit.json'):
+                target=bundle/'private/reviews'/receipt.relative_to(folder)
+                target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(receipt.read_bytes())
             learner=bundle/'learner';learner.mkdir()
             (learner/'tasks.json').write_text(json.dumps([{k:r[k] for k in ('id','prompt','split')} for r in rows if r['split']=='train'],indent=2))
             evaluation=bundle/'evaluation';evaluation.mkdir()
@@ -210,7 +232,7 @@ class GenerationJobs:
             (bundle/'source.txt').write_text(source)
             from .adversarial import check_exported_runtime
             runtime_audit=check_exported_runtime(bundle,audits)
-            manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'source evidence, blind solution cross-check, and adversarial verifier probes passed','runtime_audit':runtime_audit,'review_calls':len(audits),'adversarial_cases':sum(len(r['verifier_tests']) for a in audits for r in a['problems']),'review_method':'Separate GLM call without author answers; same-model agreement, not formal proof','learner_mount':'learner/','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
+            manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'source evidence, blind solution cross-check, and adversarial verifier probes passed','runtime_audit':runtime_audit,'accepted_review_batches':len(audits),'review_calls':sum(1 for p in (folder/'calls').glob('**/request.json') if 'blind-review' in p.parts),'adversarial_cases':sum(len(r['verifier_tests']) for a in audits for r in a['problems']),'review_method':'Separate GLM call without author answers; same-model agreement, not formal proof','learner_mount':'learner/','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
             ocr=self.read(folder.name).get('ocr')
             if ocr:manifest['source_evidence']=ocr
             (bundle/'manifest.json').write_text(json.dumps(manifest,indent=2))
