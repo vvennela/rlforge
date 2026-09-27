@@ -5,10 +5,12 @@ from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from .environment import BRIDGE,BrickEnvironment,reference,cells
 from .task_library import LIBRARY,targets
 from .agent import repair,configuration
+from ..studio.routes import Studio
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8787);p.add_argument('--runs',type=Path,required=True);p.add_argument('--drawing',type=Path,required=True);a=p.parse_args()
  if not a.drawing.is_file():p.error('Drawing file missing')
+ studio=Studio(a.runs)
  tasks={'bridge':BRIDGE,**LIBRARY};intake=a.drawing.resolve().parent.parent
  lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None,'agent':configuration()}
  class Handler(BaseHTTPRequestHandler):
@@ -18,7 +20,8 @@ def main():
   def allowed(self):return self.headers.get('Host') in [f'127.0.0.1:{a.port}',f'localhost:{a.port}']
   def do_GET(self):
    if not self.allowed():return self.send({'error':'Invalid host'},403)
-   if self.path=='/':return self.send(Path(__file__).with_name('demo.html').read_bytes(),ctype='text/html; charset=utf-8')
+   if studio.get(self):return
+   if self.path=='/workbench':return self.send(Path(__file__).with_name('demo.html').read_bytes(),ctype='text/html; charset=utf-8')
    if self.path=='/renderer.js':return self.send(Path(__file__).with_name('renderer.js').read_bytes(),ctype='text/javascript; charset=utf-8')
    if self.path=='/viewer.js':return self.send(Path(__file__).with_name('viewer.js').read_bytes(),ctype='text/javascript; charset=utf-8')
    if self.path.startswith('/drawing'):
@@ -35,8 +38,9 @@ def main():
    if self.headers.get('Content-Type')!='application/json':return self.send({'error':'JSON required'},415)
    try:
     size=int(self.headers.get('Content-Length','0'))
-    if not 0<size<=100000:raise ValueError('Invalid request size')
+    if not 0<size<=(12*1024*1024 if self.path=='/api/generate' else 100000):raise ValueError('Invalid request size')
     req=json.loads(self.rfile.read(size))
+    if studio.post(self,req):return
     with lock:
      if state['busy']:return self.send({'error':'Agent running; wait for it to finish'},409)
      if self.path=='/api/reset':

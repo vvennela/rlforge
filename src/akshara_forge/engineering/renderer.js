@@ -15,7 +15,7 @@ class BrickRenderer {
   render(state,camera) {
     const gl=this.gl,c=this.canvas,dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;
     if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
-    gl.viewport(0,0,c.width,c.height);gl.clearColor(.965,.973,.947,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0,0,c.width,c.height);if(c.dataset.theme==='dark')gl.clearColor(.063,.071,.071,1);else gl.clearColor(.965,.973,.947,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     if(!state)return;
     const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),s=Math.sin(camera.yaw),co=Math.cos(camera.yaw),sp=Math.sin(camera.pitch),cp=Math.cos(camera.pitch);
     const right=[co,-s,0],up=[-s*sp,-co*sp,cp],toward=[s*cp,co*cp,sp];
@@ -24,8 +24,8 @@ class BrickRenderer {
     const project=p=>{const v=p.map((n,i)=>n-pivot[i]);return [(dot(v,right)*units+camera.panX)*2/w,(dot(v,up)*units-camera.panY)*2/h,-dot(v,toward)/150]};
     const triangles=[],edges=[],grid=[];
     const add=(dest,p,color,bias=0)=>{const v=project(p);dest.push(v[0],v[1],v[2]+bias,...color.map(n=>n/255))};
-    for(let x=-2;x<=physical[0]+4;x+=2){add(grid,[x,-2,-.02],[216,224,212]);add(grid,[x,physical[1]+4,-.02],[216,224,212])}
-    for(let y=-2;y<=physical[1]+4;y+=2){add(grid,[-2,y,-.02],[216,224,212]);add(grid,[physical[0]+4,y,-.02],[216,224,212])}
+    for(let x=-2;x<=physical[0]+4;x+=2){add(grid,[x,-2,-.02],(c.dataset.theme==='dark'?[40,47,43]:[216,224,212]));add(grid,[x,physical[1]+4,-.02],(c.dataset.theme==='dark'?[40,47,43]:[216,224,212]))}
+    for(let y=-2;y<=physical[1]+4;y+=2){add(grid,[-2,y,-.02],(c.dataset.theme==='dark'?[40,47,43]:[216,224,212]));add(grid,[physical[0]+4,y,-.02],(c.dataset.theme==='dark'?[40,47,43]:[216,224,212]))}
     for(const b of state.bricks) {
       let [dx,dy,dz]=state.palette[b.part];if(b.rotation===90)[dx,dy]=[dy,dx];
       const x=b.x,y=b.y,z=b.z*.4,X=x+dx,Y=y+dy,Z=z+dz*.4;
