@@ -29,6 +29,7 @@ def engineering_samples(root,run):
     return [{'id':row['id'],'task':row['task'],'target':row['target'],'fixed':row['initial'],
              'initial_editable':row.get('editable_initial',[]),'palette':PALETTE,
              'before':before[row['id']]['state']['observation'],
+             'traces':{phase:records[row['id']]['state'].get('transitions',[]) if row['id'] in records else None for phase,records in [('before',before),('after',after)]},
              'after':after[row['id']]['state']['observation'] if row['id'] in after else None}
             for row in rows if row['id'] in before]
 

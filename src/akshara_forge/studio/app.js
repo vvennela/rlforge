@@ -73,6 +73,10 @@ function drawBridge(){
   $('bridge-after-panel').hidden=false;$('paired-bridge').classList.add('has-pair');
   $('bridge-after-pending').hidden=!!sample.after;$('bridge-after').hidden=!sample.after;
   $('bridge-target').textContent=`Target post: (${sample.target.x}, ${sample.target.y}), height ${sample.target.top-sample.target.bottom} plates`;
+  for(const phase of ['before','after']){
+   const turns=sample.traces?.[phase];
+   $('bridge-'+phase+'-trace').textContent=turns?turns.map(t=>`Turn ${t.turn} · reward ${t.reward.toFixed(4)}\n${JSON.stringify(t.actions,null,2)}${t.error?'\nError: '+t.error:''}`).join('\n\n'):'Evaluation pending.';
+  }
   renderer.render(scene('before'),camera);if(sample.after&&afterRenderer)afterRenderer.render(scene('after'),camera);
  }else renderer.render(bridgeState,camera);
 }
