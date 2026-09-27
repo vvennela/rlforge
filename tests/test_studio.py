@@ -148,6 +148,8 @@ def test_rejected_upload_batch_is_preserved_and_repaired_before_release(tmp_path
     root=tmp_path/s['id']
     assert (root/'calls/00/attempt-1/rejection.json').exists()
     assert any(req.get('revision_feedback',{}).get('error') for _,req in calls if req.get('revision_feedback'))
+    feedback=next(req['revision_feedback'] for _,req in calls if req.get('revision_feedback'))
+    assert feedback['rejected_packet']['problems'][0]['source_quote']=='invented'
     rows=json.loads((root/'environment/private/problems.json').read_text())
     assert len(rows)==20 and all(r['source_quote']=='Addition' for r in rows)
     assert drafts[0]==3  # One rejected draft, then exactly two accepted batches.
