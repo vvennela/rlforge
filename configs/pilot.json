@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "papers": [],
+  "model": "qwen2.5:7b-instruct",
+  "hf_training_model": "Qwen/Qwen2.5-7B-Instruct",
+  "seed": 20260926,
+  "problems_per_paper": 100,
+  "train_per_paper": 80,
+  "test_per_paper": 20,
+  "max_output_tokens": 1024,
+  "context_tokens": 8192,
+  "temperature": 0.2,
+  "attempts": 1,
+  "max_steps": 1,
+  "step_penalty": 0.0,
+  "notes": "Populate papers in a dataset config. The from-pdf command creates an isolated source-bound environment."
+}
