@@ -13,7 +13,7 @@ from .worker import apply, PALETTE
 
 TURNS=8
 SYSTEM='''You are repairing a LEGO-style bridge in an interactive sandbox. You have up to 8 turns. After each turn you receive the actual structure and measured feedback. Build the entire requested upright; one brick may not be enough. Correct your own mistakes by moving or removing editable pieces. The rest of the bridge is locked.
-Return JSON only, with an actions array containing 1 to 4 actions. Action schemas:
+Return exactly one JSON object with the key "actions", whose value is an array of 1 to 4 action objects. The outer format is {"actions": [ACTION_OBJECT]}. Replace ACTION_OBJECT with an action matching a schema below. Do not return a top-level array or insert tool names as separate array entries. Action schemas:
 place: {"tool":"place","brick":{"id":STRING,"part":STRING,"x":INTEGER,"y":INTEGER,"z":INTEGER,"rotation":0}}
 move: {"tool":"move","id":STRING,"x":INTEGER,"y":INTEGER,"z":INTEGER,"rotation":0}
 remove: {"tool":"remove","id":STRING}
@@ -49,7 +49,7 @@ def generate(path,old_dataset):
 
 def actions(text,locked):
     value=json.loads(text)
-    if not isinstance(value,dict) or set(value)!={'actions'}: raise ValueError('Return a JSON actions array')
+    if not isinstance(value,dict) or set(value)!={'actions'}: raise ValueError('Expected an object with an actions key: {"actions": [ACTION_OBJECT]}; each array item must be an action object, not a tool-name string')
     result=value['actions']
     if not isinstance(result,list) or not 1<=len(result)<=4: raise ValueError('Use 1 to 4 actions per turn')
     for a in result:
