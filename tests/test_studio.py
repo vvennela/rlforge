@@ -53,16 +53,21 @@ def test_vultr_identity_no_silent_fallback(tmp_path,monkeypatch):
         with pytest.raises(ValueError,match='identity'):g.call_model('source',tmp_path,c)
 
 
-def test_supported_thinking_budget_reserves_problem_output(tmp_path,monkeypatch):
+def test_optional_reasoning_is_disabled_for_structured_generation(tmp_path,monkeypatch):
     monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
     monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','vultr')
     monkeypatch.setenv('AKSHARA_GENERATOR_MODEL','chosen')
     monkeypatch.setenv('VULTR_INFERENCE_API_KEY','test')
     def transport(req):
-        if req.method=='GET':return httpx.Response(200,json={'data':[{'id':'chosen','reasoning':{'supports_max_tokens':True}}]})
+        if req.method=='GET':return httpx.Response(200,json={'data':[{'id':'chosen','reasoning':{'mandatory':False}}]})
         payload=json.loads(req.content)
-        assert payload['reasoning']['max_tokens']==4096
-        assert payload['max_tokens']>payload['reasoning']['max_tokens']
+        assert payload['reasoning']=={'enabled':False}
         return httpx.Response(200,json={'model':'chosen','choices':[{'finish_reason':'stop','message':{'content':'{"problems":[]}'}}]})
     with httpx.Client(transport=httpx.MockTransport(transport)) as c:
         assert g.call_model('source',tmp_path,c)=={'problems':[]}
+
+
+def test_final_complete_packet_preserves_strict_json_values():
+    assert g.decode_packet('Draft notes {not JSON}\n```json\n{"problems":[{"reference_answer":2}]}\n```')=={'problems':[{'reference_answer':2}]}
+    with pytest.raises(ValueError,match='complete environment'):
+        g.decode_packet('{"problems":[{"reference_answer":2}')

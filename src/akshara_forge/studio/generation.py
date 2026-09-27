@@ -32,9 +32,9 @@ def call_model(prompt, folder, client=None):
             catalog=client.get('https://api.vultrinference.com/v1/models',headers={'Authorization':'Bearer '+key});catalog.raise_for_status()
             selected=next((m for m in catalog.json()['data'] if m['id']==c['model']),None)
             if not selected:raise ValueError('Selected model is not in the Vultr inference catalog.')
-            req={'model':c['model'],'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt}],'max_tokens':14000}
-            if selected.get('reasoning',{}).get('supports_max_tokens'):
-                req['reasoning']={'max_tokens':4096}  # Reserve output space for the full problem batch.
+            req={'model':c['model'],'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt}],'max_tokens':32768}
+            if selected.get('reasoning') and not selected['reasoning'].get('mandatory',True):
+                req['reasoning']={'enabled':False}  # Structured generation must finish the JSON packet.
         folder.mkdir(parents=True,exist_ok=True)
         (folder/'request.json').write_text(json.dumps({'provider':c['provider'],'request':req},indent=2))
         r=client.post(url,headers={'Authorization':'Bearer '+key},json=req);r.raise_for_status();raw=r.json()
@@ -47,9 +47,26 @@ def call_model(prompt, folder, client=None):
             if raw.get('model') not in (c['model'],selected.get('hugging_face_id')):raise ValueError('Unexpected returned model identity.')
             if raw['choices'][0].get('finish_reason')!='stop':raise ValueError('Generation reached its output limit.')
             content=raw['choices'][0]['message']['content']
-        return json.loads(content)
+        return decode_packet(content)
     finally:
         if owned:client.close()
+
+def decode_packet(content):
+    """Accept the final complete JSON packet; preserve provider prose in raw receipts."""
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        decoder=json.JSONDecoder()
+        for match in __import__('re').finditer(r'\{',content):
+            try:
+                packet,end=decoder.raw_decode(content[match.start():])
+            except json.JSONDecodeError:
+                continue
+            tail=content[match.start()+end:].strip()
+            if isinstance(packet,dict) and 'problems' in packet and tail in ('','```'):
+                return packet
+        raise ValueError('Model did not return a complete environment JSON packet.')
+
 
 def validate(packet,source,count):
     rows=packet.get('problems')
