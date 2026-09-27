@@ -21,3 +21,8 @@ def test_health_observation_failure_does_not_end_session(monkeypatch,error):
 def test_explicit_disable_is_still_respected(monkeypatch):
     monkeypatch.setattr(module,'api',lambda *args:{'enabled':False})
     with pytest.raises(RuntimeError,match='disabled'):module.check_health('service')
+
+@pytest.mark.parametrize('response',[None,{}, {'enabled':None}])
+def test_incomplete_health_response_does_not_revoke_route(monkeypatch,response):
+    monkeypatch.setattr(module,'api',lambda *args:response)
+    assert module.check_health('service') is False

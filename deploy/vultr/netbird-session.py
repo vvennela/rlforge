@@ -33,10 +33,13 @@ def check_health(service_id):
             raise
         print('NetBird health check deferred: HTTP ' + str(error.code), flush=True)
         return False
-    except (TimeoutError, ConnectionError, urllib.error.URLError) as error:
+    except (TimeoutError, ConnectionError, urllib.error.URLError, json.JSONDecodeError) as error:
         print('NetBird health check deferred: ' + type(error).__name__, flush=True)
         return False
-    if not current.get('enabled'):
+    if not isinstance(current,dict) or type(current.get('enabled')) is not bool:
+        print('NetBird health check deferred: invalid response', flush=True)
+        return False
+    if current['enabled'] is False:
         raise RuntimeError('NetBird demo service was disabled')
     return True
 
