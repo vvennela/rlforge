@@ -4,7 +4,7 @@ Units: x/y in studs; z in plate heights. All parts are simplified rectangular
 stud-grid solids. This does not certify clutch strength or assembly order.
 """
 from __future__ import annotations
-import copy, hashlib, json, math, select, subprocess, time, uuid
+import copy, hashlib, json, math, os, select, subprocess, time, uuid
 from pathlib import Path
 from .worker import PALETTE, validate
 from .components import compare_components
@@ -160,16 +160,20 @@ def render_components(task):
 
 class BrickEnvironment:
  def __init__(self,trace_dir:Path,task=None):
+  self.runtime=os.environ.get('AKSHARA_SANDBOX_RUNTIME','runc')
+  if self.runtime not in ['runc','runsc']:raise ValueError('Unsupported sandbox runtime')
+  self.memory=os.environ.get('AKSHARA_SANDBOX_MEMORY','128m')
+  if self.memory not in ['128m','256m','512m','1g']:raise ValueError('Unsupported sandbox memory limit')
   self.task=copy.deepcopy(task or BRIDGE);self.trace_dir=Path(trace_dir);self.trace_dir.mkdir(parents=True,exist_ok=True)
   self.name='akshara-bricks-'+uuid.uuid4().hex[:12];self.bricks=[];self.steps=0;self.done=False;self.proc=None;self.last_tool_error=None
   self.episode=uuid.uuid4().hex;self.log=self.trace_dir/f'{self.episode}.jsonl'
   worker=Path(__file__).with_name('worker.py').resolve()
-  cmd=['docker','run','--rm','-i','--name',self.name,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=16','--memory=128m','--cpus=0.5','--user=65534:65534','--mount',f'type=bind,source={worker},target=/worker.py,readonly','python:3.12-slim','python','-I','-B','-u','/worker.py']
+  cmd=['docker','run','--rm','-i','--name',self.name,'--runtime',self.runtime,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=128','--memory='+self.memory,'--cpus=0.5','--user=65534:65534','--mount',f'type=bind,source={worker},target=/worker.py,readonly','python:3.12-slim','python','-I','-B','-u','/worker.py']
   self.proc=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
-  self._record({'event':'reset','task':self.task,'worker_sha256':hashlib.sha256(worker.read_bytes()).hexdigest(),'sandbox':'docker-network-none-read-only','verifier_files':{name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in ['environment.py','components.py','assembly_evaluator.py','task_library.py']}})
+  self._record({'event':'reset','task':self.task,'worker_sha256':hashlib.sha256(worker.read_bytes()).hexdigest(),'sandbox':'docker-network-none-read-only','runtime':self.runtime,'memory_limit':self.memory,'verifier_files':{name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in ['environment.py','components.py','assembly_evaluator.py','task_library.py']}})
  def _record(self,data):
   with self.log.open('a') as f:f.write(json.dumps({'time':time.time(),'episode':self.episode,**data})+'\n')
- def observe(self):return {'task':copy.deepcopy(self.task),'render_components':render_components(self.task),'palette':copy.deepcopy(PALETTE),'bricks':copy.deepcopy(self.bricks),'evaluation':evaluate(self.bricks,self.task),'steps':self.steps,'done':self.done,'last_tool_error':self.last_tool_error,'episode':self.episode,'sandbox':'Docker: no network, read-only, unprivileged; verifier on host'}
+ def observe(self):return {'task':copy.deepcopy(self.task),'render_components':render_components(self.task),'palette':copy.deepcopy(PALETTE),'bricks':copy.deepcopy(self.bricks),'evaluation':evaluate(self.bricks,self.task),'steps':self.steps,'done':self.done,'last_tool_error':self.last_tool_error,'episode':self.episode,'sandbox':f'Docker / {self.runtime}: no network, read-only, unprivileged; verifier on host'}
  def step(self,actions,*,actor="controller"):
   if self.done:raise ValueError('Episode ended; reset required')
   raw=json.dumps({'actions':actions,'max_bricks':self.task['limits']['bricks']},allow_nan=False)

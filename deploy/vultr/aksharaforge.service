@@ -1,0 +1,26 @@
+[Unit]
+Description=AksharaForge engineering environment
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=aksharaforge
+Group=aksharaforge
+SupplementaryGroups=docker
+WorkingDirectory=/opt/aksharaforge
+EnvironmentFile=/etc/aksharaforge.env
+ExecStart=/opt/aksharaforge/.venv/bin/python -m akshara_forge.engineering.server --runs /var/lib/aksharaforge/runs --drawing /opt/aksharaforge/intake/ak0443/preview.jpg
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=40
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aksharaforge
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -4,13 +4,13 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from .environment import BRIDGE,BrickEnvironment,reference,cells
 from .task_library import LIBRARY,targets
-from .agent import repair
+from .agent import repair,configuration
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8787);p.add_argument('--runs',type=Path,required=True);p.add_argument('--drawing',type=Path,required=True);a=p.parse_args()
  if not a.drawing.is_file():p.error('Drawing file missing')
  tasks={'bridge':BRIDGE,**LIBRARY};intake=a.drawing.resolve().parent.parent
- lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None}
+ lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None,'agent':configuration()}
  class Handler(BaseHTTPRequestHandler):
   def log_message(self,*args):pass
   def send(self,data,status=200,ctype='application/json'):
@@ -56,8 +56,10 @@ def main():
        env.step([{'tool':'place','brick':b} for b in bricks],actor='scripted_fixture')
      elif self.path=='/api/step':env.step(req['actions'],actor='manual_ui');state['mode']='manual tool actions'
      elif self.path=='/api/agent':
+      agent=configuration()
+      if not agent['configured']:raise ValueError('Configure the Vultr Serverless Inference API key before running an agent')
       if env.done:raise ValueError('Load the damaged fixture or reset before running the agent')
-      state.update(busy=True,mode='Qwen 2.5 7B · inference-time repair',error=None)
+      state.update(busy=True,mode=agent['model']+' · inference-time repair',error=None)
       def run():
        try:repair(env,a.runs/'agents'/env.episode)
        except Exception as exc:state['error']=str(exc)[:300]
