@@ -115,3 +115,39 @@ def test_bridge_gallery_pairs_by_identity_and_keeps_frozen_order(tmp_path):
         f.write('\n'+json.dumps({'id':'unknown','state':{'observation':{}}}))
     with pytest.raises(ValueError,match='identity mismatch'):
         engineering_samples(tmp_path,run)
+
+
+def test_source_alignment_preserves_symbols_and_requires_unique_span():
+    from akshara_forge.studio.source import bind_quote
+    source='The rule is x = 1\n + y.';row={'source_quote':'The rule is x = 1 + y.'}
+    bind_quote(row,source)
+    assert row['source_quote']==source
+    assert row['source_quote_submitted']=='The rule is x = 1 + y.'
+    assert source[row['source_quote_alignment']['start']:row['source_quote_alignment']['end']]==row['source_quote']
+    with pytest.raises(ValueError):bind_quote({'source_quote':'The rule is x = 1 - y.'},source)
+    with pytest.raises(ValueError,match='unique'):bind_quote({'source_quote':'a b'},'a\n b; a\t b')
+
+
+def test_rejected_upload_batch_is_preserved_and_repaired_before_release(tmp_path,monkeypatch):
+    monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
+    monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
+    calls=[];drafts=[0]
+    def provider(prompt,folder,*,system=g.SYSTEM,json_prefix=False):
+        request=json.loads(prompt);calls.append((folder,request))
+        if system!=g.SYSTEM:
+            return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value'} for a in [-1,-2,-3]]} for r in request['problems']]}
+        drafts[0]+=1
+        return {'problems':[{'prompt':f'Compute {drafts[0]*10+i} + 1','source_quote':'invented' if drafts[0]==1 else 'Addition','solution_outline':'Add one.','reference_answer':drafts[0]*10+i+1,'verification':'numeric','tolerance':0} for i in range(10)]}
+    monkeypatch.setattr(g,'call_model',provider)
+    jobs=g.GenerationJobs(tmp_path);s=jobs.start({'filename':'source.txt','data':base64.b64encode(b'Addition').decode(),'count':20})
+    for _ in range(200):
+        s=jobs.read(s['id'])
+        if s['status'] in ('ready','failed'):break
+        time.sleep(.01)
+    assert s['status']=='ready',s
+    root=tmp_path/s['id']
+    assert (root/'calls/00/attempt-1/rejection.json').exists()
+    assert any(req.get('revision_feedback',{}).get('error') for _,req in calls if req.get('revision_feedback'))
+    rows=json.loads((root/'environment/private/problems.json').read_text())
+    assert len(rows)==20 and all(r['source_quote']=='Addition' for r in rows)
+    assert drafts[0]==3  # One rejected draft, then exactly two accepted batches.
