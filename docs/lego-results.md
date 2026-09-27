@@ -48,3 +48,11 @@ Run: `long-004`. Source dataset: `dataset-v1` (80 train, 20 held out). Full traj
   "adapter/adapter_model.safetensors": "b717c6d6519c9cb47f43198d88b1b1dc0fb99a19c5c280417ebee689e0a9907d"
 }
 ```
+
+## Independent weight audit
+
+A separate CPU comparison of all 112 saved LoRA tensors against the initial
+adapter confirmed **2,523,134 changed parameters** and delta L2
+**0.16287758055618165**, exactly matching the training receipt. The adapter hash
+matched the archived file above. This check loads only adapter tensors, not the
+base model; use `python -m akshara_forge.adapter_audit` to reproduce it.

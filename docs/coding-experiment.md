@@ -96,3 +96,19 @@ vectors, requires all 320 training attempts and 40 evaluation attempts to match
 Vultr execution receipts, verifies frozen dataset hashes and task order, and
 fingerprints the adapter and evidence. Missing receipts, incomplete runs, duplicate
 steps, swapped cases, and inconsistent scores prevent a verified report.
+
+Saved adapter changes can also be checked independently on CPU, without loading
+Qwen's base weights or allocating GPU memory:
+
+```sh
+PYTHONPATH=src python -m akshara_forge.adapter_audit \
+  --initial /path/to/code-002/initial-adapter.pt \
+  --adapter /path/to/code-002/adapter/adapter_model.safetensors \
+  --expected /path/to/code-002/completion.json \
+  --output /path/to/code-002/weight-audit.json
+```
+
+This verifies tensor identities/shapes, finite deltas, the exact number of changed
+parameters, and the recorded L2 change. It fingerprints both weight files. An
+incorrect parameter-change claim is rejected. Weight changes establish that
+training updated the model; the paired evaluation establishes behavioral change.
