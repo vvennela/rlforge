@@ -84,3 +84,13 @@ First validate a frozen task generator and establish baseline success on repair 
 A reasonable initial experiment budget is 100 optimizer updates with four sampled rollouts per training prompt, inspecting validation at 25, 50 and 100 updates. Decide whether to extend to 200 based on validation improvement, not the final test set. This is a proposed budget, not an empirically established convergence estimate. If all sampled completions receive identical rewards, fix task difficulty or initialization before spending more updates. Distinguish tool-action rounds from weight-update steps, and count episodes/completions as well as optimizer updates.
 
 Keep the full component vector in logs. A GRPO adapter can use separately weighted reward functions; trainer-specific aggregation still needs an explicit optimization rule. Freeze it before comparison. Current TRL documentation: https://huggingface.co/docs/trl/grpo_trainer . This change launches no engineering training or cloud resources; the existing AWS stop cap remains unchanged.
+
+## v2: shared assembly tasks and depth-correct viewer
+
+The current contract and experiment plan are in [engineering-environment-spec.md](engineering-environment-spec.md); earlier v0 limits and reward counts above are historical.
+
+The viewer now uses a WebGL depth buffer instead of sorting whole faces by centroid. This resolves the deck/support occlusion error under rotation. The task selector includes the bridge, a Ford vehicle proportion task, and a Wilson turbine/generator composition study. The latter uses authored dimensions, explicitly not calibrated source geometry. No engine physics or engineering weight training was added.
+
+The controller accepts a task through `BrickEnvironment(trace_dir, task=...)`. Bridge semantics are preserved. Car and turbine use fixed target-region occupancy with per-component diagnostics, independent of brick IDs. The expanded palette remains rectangular; the workspace height is 64 plates. The bridge limit is 256 bricks; new assemblies permit 512. References are scripted witnesses tiled with staggered layers and checked for stud connectivity, not model rollouts. Their procedural geometry is not a dataset of expert human builds.
+
+API reset accepts `{"task":"bridge|car|turbine","mode":"empty|reference|damaged|missing_uprights"}`. The historical `missing_uprights` mode means the declared missing component for non-bridge tasks. Both non-bridge corruption modes currently remove that component; they are not distinct benchmarks. Source previews must be present in the sibling archive intake folders. A deployed bundle must provide those assets or provenance separately.

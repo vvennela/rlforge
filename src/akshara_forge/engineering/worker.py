@@ -3,6 +3,7 @@ import json
 import sys
 
 PALETTE = {
+ 'brick_1x2':[1,2,3], 'brick_1x4':[1,4,3], 'brick_2x4':[2,4,3], 'brick_2x8':[2,8,3],
  'brick_1x1': [1,1,3], 'plate_1x1': [1,1,1], 'plate_2x6': [2,6,1],
  'brick_2x2': [2,2,3], 'brick_2x6': [2,6,3],
  'plate_1x2': [1,2,1], 'plate_1x4': [1,4,1],
@@ -17,11 +18,12 @@ def validate(b):
  if b['rotation'] not in [0,90]: raise ValueError('Rotation must be 0 or 90')
  dx,dy,dz=PALETTE[b['part']]
  if b['rotation']==90:dx,dy=dy,dx
- if not (0<=b['x']<=64-dx and 0<=b['y']<=24-dy and 0<=b['z']<=24-dz): raise ValueError('Outside 64 x 24 stud, 24 plate-height workspace')
+ if not (0<=b['x']<=64-dx and 0<=b['y']<=24-dy and 0<=b['z']<=64-dz): raise ValueError('Outside 64 x 24 stud, 64 plate-height workspace')
  return dx,dy,dz
 
-def apply(state,actions):
- if not isinstance(actions,list) or len(actions)>256: raise ValueError('At most 256 actions per transaction')
+def apply(state,actions,max_bricks=512):
+ if type(max_bricks) is not int or not 1<=max_bricks<=512:raise ValueError("Invalid brick limit")
+ if not isinstance(actions,list) or len(actions)>512: raise ValueError('At most 512 actions per transaction')
  result={b['id']:dict(b) for b in state}
  for a in actions:
   if not isinstance(a,dict):raise ValueError('Action must be an object')
@@ -38,7 +40,7 @@ def apply(state,actions):
    if set(a)!={'tool','id'}:raise ValueError('remove requires id')
    del result[a['id']]
   else:raise ValueError('Unknown tool; use place, move, remove')
-  if len(result)>256:raise ValueError('256 brick limit')
+  if len(result)>max_bricks:raise ValueError(f'{max_bricks} brick limit')
  return list(result.values())
 
 if __name__=='__main__':
@@ -46,6 +48,6 @@ if __name__=='__main__':
  for line in sys.stdin:
   try:
    if len(line)>100000:raise ValueError('Request too large')
-   req=json.loads(line);new=apply(state,req['actions']);state=new
+   req=json.loads(line);new=apply(state,req['actions'],req.get('max_bricks',512));state=new
    print(json.dumps({'ok':True,'bricks':state}),flush=True)
   except Exception as exc:print(json.dumps({'ok':False,'error':str(exc)[:250],'bricks':state}),flush=True)

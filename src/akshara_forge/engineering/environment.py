@@ -10,7 +10,7 @@ from .worker import PALETTE, validate
 from .components import compare_components
 
 BRIDGE={
- 'id':'ak0443-bridge-v1','title':'Old Bridge · Anaktuvuk Pass',
+ 'family':'bridge','source_id':'ak0443','view_bounds':[38,6,22],'id':'ak0443-bridge-v1','title':'Old Bridge · Anaktuvuk Pass',
  'source_url':'https://www.loc.gov/item/ak0443/',
  'source_sha256':'7773dcab25ba8d65d9d27619da86c48dc1bc61df20aec66eba98fccefef0cb57',
  'provenance':'Manually reviewed drawing dimensions; task compilation is curated, not automatic OCR-to-environment.',
@@ -35,6 +35,9 @@ def cells(b):
 
 def reference(task=BRIDGE):
  """Deterministic feasible fixture for verifier QA. Never a model rollout."""
+ if task.get('geometry_kind')=='component_assembly':
+  from .task_library import reference as assembly_reference
+  return assembly_reference(task)
  g=task['grid'];L,W,Z=g['length'],g['width'],g['deck_z'];bricks=[]
  def add(part,x,y,z,r=0):bricks.append(dict(id=f'b{len(bricks)}',part=part,x=x,y=y,z=z,rotation=r))
  for x in g['pier_x']:
@@ -56,6 +59,9 @@ def reference(task=BRIDGE):
  return bricks
 
 def target_components(task=BRIDGE):
+ if task.get('geometry_kind')=='component_assembly':
+  from .task_library import targets
+  return targets(task)
  g=task['grid'];L,W,Z=g['length'],g['width'],g['deck_z']
  out=[{'id':'deck','kind':'deck','cells':{(x,y,z) for x in range(L) for y in range(W) for z in range(Z,Z+2)},'evidence':'Plan proportions; continuous two-layer rectangular deck is a grid approximation.'}]
  for n,start in enumerate(g['pier_x'],1):
@@ -64,9 +70,9 @@ def target_components(task=BRIDGE):
    out.append({'id':f'upright_{n}_{side}','kind':'upright','cells':{(start,y,z) for z in range(Z+2,g['upright_tops'][n-1])},'evidence':'South elevation top datum (station 2) or calibrated short-post estimate (station 1); nearest-grid height. 1-stud thickness and pair symmetry remain approximations.'})
  return out
 
-def evaluate(bricks,task=BRIDGE):
- g=task['grid'];L,W,Z=g['length'],g['width'],g['deck_z'];issues=[];voxels=[]
- if not isinstance(bricks,list) or len(bricks)>256:raise ValueError('Invalid assembly')
+def assembly_geometry(bricks,limit=512):
+ if not isinstance(bricks,list) or len(bricks)>limit:raise ValueError('Invalid assembly')
+ voxels=[]
  ids=set()
  for b in bricks:
   if b['id'] in ids:raise ValueError('Duplicate id')
@@ -88,6 +94,14 @@ def evaluate(bricks,task=BRIDGE):
   if i in reached:continue
   reached.add(i);todo.extend(graph[i]-reached)
  connected=bool(bricks) and len(reached)==len(bricks)
+ return occupied,collision_cells,connected,sum(map(len,graph))//2
+
+def evaluate(bricks,task=BRIDGE):
+ if task.get('geometry_kind')=='component_assembly':
+  from .assembly_evaluator import evaluate_assembly
+  return evaluate_assembly(bricks,task)
+ g=task['grid'];L,W,Z=g['length'],g['width'],g['deck_z'];issues=[]
+ occupied,collision_cells,connected,connections=assembly_geometry(bricks,task['limits']['bricks'])
  target_deck={(x,y,z) for x in range(L) for y in range(W) for z in range(Z,Z+2)}
  target_piers={(x,y,z) for start in g['pier_x'] for x in range(start,start+2) for y in range(W) for z in range(Z)}
  targets=target_components(task)
@@ -138,7 +152,11 @@ def evaluate(bricks,task=BRIDGE):
  if collision_cells:issues.append(f'{collision_cells} overlapping occupied cells')
  if not connected:issues.append('Assembly is empty or has disconnected components')
  if not two_piers:issues.append('Two complete piers required at the specified positions')
- return {'reward_vector':scores,'scalar_reward':scalar,'success':success,'dimension_details':detail,'checks':checks,'issues':issues,'brick_count':len(bricks),'collision_cells':collision_cells,'connection_count':sum(map(len,graph))//2,'spec_hash':fingerprint(task),'components':component_scores,'unmodeled_source_features':task['unmodeled_source_features'],'coverage_claim':task['coverage_claim'],'verifier':'brick-grid-v1','limitations':'Grid connection and geometry checks only; no strength, friction, clutch, physical stability or insertion-order certification.'}
+ return {'reward_vector':scores,'scalar_reward':scalar,'success':success,'dimension_details':detail,'checks':checks,'issues':issues,'brick_count':len(bricks),'collision_cells':collision_cells,'connection_count':connections,'spec_hash':fingerprint(task),'components':component_scores,'unmodeled_source_features':task['unmodeled_source_features'],'coverage_claim':task['coverage_claim'],'verifier':'brick-grid-v1','limitations':'Grid connection and geometry checks only; no strength, friction, clutch, physical stability or insertion-order certification.'}
+
+def render_components(task):
+ from .components import bounds
+ return [{**bounds(t['cells']),'color':t['color']} for t in target_components(task) if 'color' in t]
 
 class BrickEnvironment:
  def __init__(self,trace_dir:Path,task=None):
@@ -148,13 +166,13 @@ class BrickEnvironment:
   worker=Path(__file__).with_name('worker.py').resolve()
   cmd=['docker','run','--rm','-i','--name',self.name,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=16','--memory=128m','--cpus=0.5','--user=65534:65534','--mount',f'type=bind,source={worker},target=/worker.py,readonly','python:3.12-slim','python','-I','-B','-u','/worker.py']
   self.proc=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
-  self._record({'event':'reset','task':self.task,'worker_sha256':hashlib.sha256(worker.read_bytes()).hexdigest(),'sandbox':'docker-network-none-read-only','verifier_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
+  self._record({'event':'reset','task':self.task,'worker_sha256':hashlib.sha256(worker.read_bytes()).hexdigest(),'sandbox':'docker-network-none-read-only','verifier_files':{name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in ['environment.py','components.py','assembly_evaluator.py','task_library.py']}})
  def _record(self,data):
   with self.log.open('a') as f:f.write(json.dumps({'time':time.time(),'episode':self.episode,**data})+'\n')
- def observe(self):return {'task':copy.deepcopy(self.task),'palette':copy.deepcopy(PALETTE),'bricks':copy.deepcopy(self.bricks),'evaluation':evaluate(self.bricks,self.task),'steps':self.steps,'done':self.done,'last_tool_error':self.last_tool_error,'episode':self.episode,'sandbox':'Docker: no network, read-only, unprivileged; verifier on host'}
+ def observe(self):return {'task':copy.deepcopy(self.task),'render_components':render_components(self.task),'palette':copy.deepcopy(PALETTE),'bricks':copy.deepcopy(self.bricks),'evaluation':evaluate(self.bricks,self.task),'steps':self.steps,'done':self.done,'last_tool_error':self.last_tool_error,'episode':self.episode,'sandbox':'Docker: no network, read-only, unprivileged; verifier on host'}
  def step(self,actions,*,actor="controller"):
   if self.done:raise ValueError('Episode ended; reset required')
-  raw=json.dumps({'actions':actions},allow_nan=False)
+  raw=json.dumps({'actions':actions,'max_bricks':self.task['limits']['bricks']},allow_nan=False)
   if len(raw)>100000:raise ValueError('Action request too large')
   self.proc.stdin.write(raw+'\n');self.proc.stdin.flush()
   if not select.select([self.proc.stdout],[],[],20)[0]:self.close();raise TimeoutError('Sandbox response timed out')

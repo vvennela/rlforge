@@ -2,12 +2,14 @@
 import argparse,json,threading,time
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
-from .environment import BrickEnvironment,reference
+from .environment import BRIDGE,BrickEnvironment,reference,cells
+from .task_library import LIBRARY,targets
 from .agent import repair
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8787);p.add_argument('--runs',type=Path,required=True);p.add_argument('--drawing',type=Path,required=True);a=p.parse_args()
  if not a.drawing.is_file():p.error('Drawing file missing')
+ tasks={'bridge':BRIDGE,**LIBRARY};intake=a.drawing.resolve().parent.parent
  lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None}
  class Handler(BaseHTTPRequestHandler):
   def log_message(self,*args):pass
@@ -17,8 +19,13 @@ def main():
   def do_GET(self):
    if not self.allowed():return self.send({'error':'Invalid host'},403)
    if self.path=='/':return self.send(Path(__file__).with_name('demo.html').read_bytes(),ctype='text/html; charset=utf-8')
+   if self.path=='/renderer.js':return self.send(Path(__file__).with_name('renderer.js').read_bytes(),ctype='text/javascript; charset=utf-8')
    if self.path=='/viewer.js':return self.send(Path(__file__).with_name('viewer.js').read_bytes(),ctype='text/javascript; charset=utf-8')
-   if self.path=='/drawing':return self.send(a.drawing.read_bytes(),ctype='image/jpeg')
+   if self.path.startswith('/drawing'):
+    key=self.path.partition('?task=')[2] or 'bridge'
+    if key not in tasks:return self.send({'error':'Unknown task'},404)
+    drawing=a.drawing if key=='bridge' else intake/tasks[key]['source_id']/'preview.jpg'
+    return self.send(drawing.read_bytes(),ctype='image/jpeg')
    if self.path=='/api/state':
     with lock:return self.send({**env.observe(),**state})
    self.send({'error':'Not found'},404)
@@ -33,13 +40,17 @@ def main():
     with lock:
      if state['busy']:return self.send({'error':'Agent running; wait for it to finish'},409)
      if self.path=='/api/reset':
-      mode=req.get('mode','empty')
+      mode=req.get('mode','empty');key=req.get('task','bridge')
+      if key not in tasks:raise ValueError('Unknown task')
       if mode not in ['empty','damaged','reference','missing_uprights']:raise ValueError('Unknown fixture')
-      env.close();env=BrickEnvironment(a.runs/'episodes');state.update(mode=mode+' — scripted fixture' if mode!='empty' else 'empty workspace',error=None)
+      env.close();env=BrickEnvironment(a.runs/'episodes',task=tasks[key]);state.update(mode=mode+' — scripted fixture' if mode!='empty' else 'empty workspace',error=None)
       if mode!='empty':
-       bricks=reference()
-       if mode=='missing_uprights':bricks=[b for b in bricks if b['z']<env.task['grid']['deck_z']+2]
-       if mode=='damaged':
+       bricks=reference(env.task)
+       if key!='bridge' and mode in ['missing_uprights','damaged']:
+        missing=next(c['cells'] for c in targets(env.task) if c['id']==env.task['fault_component'])
+        bricks=[b for b in bricks if not cells(b)&missing]
+       if key=='bridge' and mode=='missing_uprights':bricks=[b for b in bricks if b['z']<env.task['grid']['deck_z']+2]
+       if key=='bridge' and mode=='damaged':
         for b in bricks:
          if b['id'] in ['b2','b3','b5']:b['x']-=4
        env.step([{'tool':'place','brick':b} for b in bricks],actor='scripted_fixture')
