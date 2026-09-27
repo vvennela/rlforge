@@ -2,7 +2,7 @@
 
 **Turn technical knowledge into environments where AI agents learn by doing.**
 
-RLForge (formerly AksharaForge) connects document extraction, task generation, sandboxed execution, reward verification, and reinforcement learning. Upload a paper or specification; the pipeline preserves its source evidence and builds exercises with a standalone evaluation runtime. Vultr hosts the web application, sandboxes, and GLM-powered generation; an AWS GPU trains Qwen 2.5 7B.
+RLForge connects document extraction, task generation, sandboxed execution, reward verification, and reinforcement learning. Upload a paper or specification; the pipeline preserves its source evidence and builds exercises with a standalone evaluation runtime. Vultr hosts the web application, sandboxes, and GLM-powered generation; an AWS GPU trains Qwen 2.5 7B.
 
 ## What we tested
 

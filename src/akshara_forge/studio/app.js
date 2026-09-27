@@ -39,7 +39,7 @@ function showPage(){
  const upload=page==='upload';$('upload-page').hidden=!upload;$('cases').hidden=upload;document.querySelector('[data-upload-only]').hidden=!upload;
  document.querySelectorAll('[data-page]').forEach(b=>{const on=b.dataset.page===page;b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1});
  if(!upload){active=page;renderCase()}
- document.title='AksharaForge — '+(upload?'Environment studio':'Case Study: '+page[0].toUpperCase()+page.slice(1));
+ document.title='RLForge — '+(upload?'Environment studio':'Case Study: '+page[0].toUpperCase()+page.slice(1));
  window.scrollTo({top:0,behavior:'instant'});
 }
 for(const b of document.querySelectorAll('[data-page]'))b.addEventListener('click',()=>{location.hash=b.dataset.page});
