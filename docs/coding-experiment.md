@@ -79,3 +79,20 @@ record exact-field accuracy as an additional metric while the primary score
 still requires all tests to pass. A fresh baseline is recorded for this run.
 The reward revision uses training-attempt evidence; held-out cases remain outside
 training, task generation, and checkpoint selection.
+
+## Result audit
+
+After the fixed 80-batch run and both evaluations finish, run:
+
+```sh
+PYTHONPATH=src python -m akshara_forge.coding.report \
+  --run /path/to/code-002 --dataset /path/to/dataset-v3 \
+  --receipts /path/to/vultr-evidence-v4/requests.jsonl \
+  --output /path/to/coding-verified-result.json
+```
+
+This independently recomputes reward arithmetic and paired scores from recorded
+vectors, requires all 320 training attempts and 40 evaluation attempts to match
+Vultr execution receipts, verifies frozen dataset hashes and task order, and
+fingerprints the adapter and evidence. Missing receipts, incomplete runs, duplicate
+steps, swapped cases, and inconsistent scores prevent a verified report.
