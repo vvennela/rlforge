@@ -59,4 +59,20 @@ pytest -q
 
 Tests cover source integrity, reference isolation, sandbox behavior, grading, curriculum contracts, output parsing and evaluation compatibility. The optional archive integration fixture is skipped when local paper artifacts are absent.
 
+## MATH-500 benchmark
+
+The separate benchmark evaluator scores all 500 questions using Math-Verify, without a teacher model. Install the training and benchmark extras in a CUDA environment, then download the frozen dataset:
+
+```bash
+pip install -e '.[train,benchmark]'
+hf download HuggingFaceH4/MATH-500 test.jsonl --type dataset \
+  --revision 6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be --local-dir inputs/math500
+python -m akshara_forge.math500 --dataset inputs/math500/test.jsonl \
+  --model /path/to/pinned/qwen-checkpoint --output runs/math500-before
+```
+
+For a later comparison, run the same command with `--adapter /path/to/adapter` and a new output directory. Keep the base checkpoint, dataset, evaluator, hardware, dependencies, batch size and token budget identical. Defaults are BF16, greedy decoding, eight questions per batch and 4,096 output tokens. Completed batches are saved atomically; rerunning the exact command resumes. The evaluator rejects changed settings and records extraction failures and truncations. `math500.compare(before, after)` requires two complete, matching runs.
+
+Keep MATH-500 evaluation-only. Do not use its questions or scores to generate training tasks or repeatedly select checkpoints. The project target is more than 10 **percentage points** of absolute improvement, which requires at least 51 net additional correct answers out of 500. This is a project-specific protocol, not a claim of matching published leaderboard settings.
+
 This repository contains pipeline code and tests. Papers, generated datasets, credentials, model weights, private run traces and cloud connection settings are excluded.
