@@ -1,5 +1,5 @@
 """Private tests stay on the Vultr controller; candidate code runs in gVisor."""
-import argparse, hashlib, hmac, json, re, select, subprocess, threading, time, uuid
+import argparse, hashlib, hmac, json, re, select, subprocess, threading, time, traceback, uuid
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 
@@ -72,6 +72,7 @@ def serve(dataset,output,token_file,port,training_reward='tests'):
         def log_message(self,*args):pass
         def do_POST(self):
             if self.path!='/grade' or not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+token):self.send_error(403);return
+            req=None
             try:
                 n=int(self.headers.get('Content-Length','0'))
                 if not 0<n<100000:raise ValueError('Invalid size')
@@ -85,6 +86,9 @@ def serve(dataset,output,token_file,port,training_reward='tests'):
                     with (output/'requests.jsonl').open('a') as f:f.write(json.dumps({'time':time.time(),**req,'result':result})+'\n')
                 raw=json.dumps(result).encode();self.send_response(200);self.end_headers();self.wfile.write(raw)
             except Exception as exc:
+                with lock:
+                    with (output/'errors.jsonl').open('a') as f:
+                        f.write(json.dumps({'time':time.time(),'request':req,'error':str(exc),'traceback':traceback.format_exc()})+'\n')
                 self.send_response(400);self.end_headers();self.wfile.write(json.dumps({'error':str(exc)[:300]}).encode())
     ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
 
