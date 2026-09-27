@@ -14,13 +14,13 @@ STATE = Path('/opt/aksharaforge-netbird/demo-service.json')
 DOMAIN = 'aksharaforge-yhm6.netbird.64-177-45-215.sslip.io'
 TOKEN_FILE = Path('/opt/aksharaforge-netbird/bootstrap.json')
 
-def api(method, path, body=None):
+def api(method, path, body=None, *, timeout=10):
     token = json.loads(TOKEN_FILE.read_text())['personal_access_token']
     req = urllib.request.Request('http://127.0.0.1:19080/api/' + path,
         data=json.dumps(body).encode() if body is not None else None,
         method=method, headers={'Authorization': 'Token ' + token,
                                'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=10) as response:
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         content = response.read()
         return json.loads(content) if content else None
 
@@ -68,7 +68,7 @@ def main():
         'enabled': True, 'pass_host_header': True, 'auth': {},
         'targets': [{'target_id': peer['id'], 'target_type': 'peer',
                      'host': peer['ip'], 'protocol': 'http', 'port': 8789,
-                     'path': '/', 'enabled': True}]})
+                     'path': '/', 'enabled': True}]}, timeout=45)
     STATE.write_text(json.dumps({'id': service['id'], 'domain': DOMAIN}))
     STATE.chmod(0o600)
     try:
