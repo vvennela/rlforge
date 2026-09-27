@@ -22,8 +22,7 @@ main>header>span{display:block;padding:0 12px;font-size:9px}
 
 .paired-bridge.has-pair,.paired-programs{display:grid;grid-template-columns:1fr 1fr}.assembly-label{padding:12px 18px;font:11px 'Courier New',monospace;color:var(--accent);border-bottom:1px solid var(--line)}.paired-bridge.has-pair>div+div,.paired-programs>div+div{border-left:1px solid var(--line)}.paired-bridge .bridge-stage{height:310px}#bridge-after-pending{position:absolute;inset:40% 18px;color:var(--muted);text-align:center;font-size:12px}.bridge-details button{background:transparent;border:0;color:var(--accent);font-size:11px}.program-comparison{margin:25px 36px 0;border:1px solid var(--line)}.paired-programs h3{font-size:12px;padding:16px;margin:0}.paired-programs h3 span{float:right;color:var(--accent)}.paired-programs pre{max-height:400px;font-size:11px;background:#101115;padding:16px}.paired-programs code{white-space:pre-wrap}@media(max-width:700px){.paired-bridge.has-pair,.paired-programs{grid-template-columns:1fr}.paired-bridge.has-pair>div+div,.paired-programs>div+div{border-left:0;border-top:1px solid var(--line)}.program-comparison{margin-left:22px;margin-right:22px}}
 
-@media(min-width:1000px){.paired-bridge.has-pair{grid-template-columns:repeat(3,minmax(0,1fr))}.paired-bridge .assembly-label{font-size:10px;padding:12px 10px}}
-@media(min-width:701px) and (max-width:999px){#bridge-initial-panel{grid-column:1/-1}}
+@media(min-width:1000px){.paired-bridge.has-pair{grid-template-columns:repeat(2,minmax(0,1fr))}.paired-bridge .assembly-label{font-size:10px;padding:12px 10px}}
 
 .bridge-case-control{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}.bridge-case-control select{max-width:65%;font-size:11px;padding:8px}
 

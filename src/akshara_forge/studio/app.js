@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,initialRenderer=null,pointer=null,bridgeSelection=null,programSelection=null;
+let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,pointer=null,bridgeSelection=null,programSelection=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
 const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Qwen writes Python implementations of iterative-deepening search. Each program runs against hidden tests in a Vultr sandbox, checking paths, costs, thresholds, traversal order, and edge cases.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
@@ -112,8 +112,6 @@ function drawBridge(){
  if(sample){
   const scene=phase=>({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample[phase]?.editable_bricks||[])]});
   $('bridge-sample-label').textContent=(sample===featured?'NEWLY SOLVED EXAMPLE / ':'HELD-OUT REPAIR / ')+sample.id;
-  $('bridge-initial-panel').hidden=false;
-  initialRenderer?.render({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample.initial_editable||[])]},camera);
   $('bridge-before-label').textContent=`Base Qwen · ${(100*sample.before.gap_iou).toFixed(1)}% target overlap`;
   $('bridge-after-label').textContent=sample.after?`Trained Qwen · ${(100*sample.after.gap_iou).toFixed(1)}% target overlap`:'After training';
   $('bridge-after-panel').hidden=false;$('paired-bridge').classList.add('has-pair');
@@ -126,7 +124,7 @@ function drawBridge(){
   renderer.render(scene('before'),camera);if(sample.after&&afterRenderer)afterRenderer.render(scene('after'),camera);
  }else renderer.render(bridgeState,camera);
 }
-async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));$('bridge-after').dataset.theme='dark';afterRenderer=new BrickRenderer($('bridge-after'));$('bridge-initial').dataset.theme='dark';initialRenderer=new BrickRenderer($('bridge-initial'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
+async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));$('bridge-after').dataset.theme='dark';afterRenderer=new BrickRenderer($('bridge-after'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
 $('bridge').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge').setPointerCapture(e.pointerId)});
 $('bridge').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
 for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge').addEventListener(n,()=>pointer=null);
@@ -136,10 +134,6 @@ $('bridge-after').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e
 $('bridge-after').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
 for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-after').addEventListener(n,()=>pointer=null);
 $('bridge-after').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
-$('bridge-initial').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge-initial').setPointerCapture(e.pointerId)});
-$('bridge-initial').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
-for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-initial').addEventListener(n,()=>pointer=null);
-$('bridge-initial').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
 $('program-case').addEventListener('change',e=>{programSelection=e.target.value;renderCase()});
 $('bridge-case').addEventListener('change',e=>{bridgeSelection=e.target.value;drawBridge()});
 $('reset-view').onclick=()=>{Object.assign(camera,{yaw:-.65,pitch:.55,zoom:1});drawBridge()};window.addEventListener('resize',drawBridge);
