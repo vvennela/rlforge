@@ -1,35 +1,72 @@
 #!/usr/bin/env python3
-"""Keep a public NetBird URL alive only for this systemd demo session."""
+"""Manage a public NetBird reverse proxy for the lifetime of a demo unit."""
 import json
 import os
 from pathlib import Path
-import re
 import signal
-import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.request
 
-session = Path('/run/aksharaforge-demo/session.json')
-child = subprocess.Popen(['/usr/bin/netbird', 'expose', '8789', '--with-name-prefix',
-                          'aksharaforge'],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-def stop(*_):
-    child.terminate()
-signal.signal(signal.SIGTERM, stop)
-signal.signal(signal.SIGINT, stop)
-try:
-    for line in child.stdout:
-        match = re.search(r'URL:\s+(https://[a-zA-Z0-9.-]+)(?:\s|$)', line)
-        if match:
-            temp = session.with_suffix('.tmp')
-            temp.write_text(json.dumps({'origin':match[1], 'role':'public-demo'}))
-            temp.chmod(0o644)
-            os.replace(temp, session)
-            print('Demo URL: '+match[1], flush=True)
-        elif any(word in line.lower() for word in ('error', 'failed', 'unable')):
-            print('NetBird expose: '+line.strip()[:300], flush=True)
-        # This public expose command has no authentication arguments.
-    raise SystemExit(child.wait())
-finally:
-    session.unlink(missing_ok=True)
-    if child.poll() is None:
-        child.terminate()
-        child.wait(timeout=10)
+SESSION = Path('/run/aksharaforge-demo/session.json')
+STATE = Path('/opt/aksharaforge-netbird/demo-service.json')
+DOMAIN = 'aksharaforge-yhm6.netbird.64-177-45-215.sslip.io'
+TOKEN_FILE = Path('/opt/aksharaforge-netbird/bootstrap.json')
+
+def api(method, path, body=None):
+    token = json.loads(TOKEN_FILE.read_text())['personal_access_token']
+    req = urllib.request.Request('http://127.0.0.1:19080/api/' + path,
+        data=json.dumps(body).encode() if body is not None else None,
+        method=method, headers={'Authorization': 'Token ' + token,
+                               'Content-Type': 'application/json'})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        content = response.read()
+        return json.loads(content) if content else None
+
+def cleanup():
+    SESSION.unlink(missing_ok=True)
+    if STATE.exists():
+        service_id = json.loads(STATE.read_text())['id']
+        try:
+            api('DELETE', 'reverse-proxies/services/' + service_id)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+        STATE.unlink(missing_ok=True)
+
+def main():
+    cleanup()
+    if '--cleanup' in sys.argv:
+        return
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    peers = api('GET', 'peers')
+    peer = next(p for p in peers if p['ip'] == '100.81.229.176')
+    service = api('POST', 'reverse-proxies/services', {
+        'name': 'AksharaForge public demo', 'domain': DOMAIN,
+        'enabled': True, 'pass_host_header': True, 'auth': {},
+        'targets': [{'target_id': peer['id'], 'target_type': 'peer',
+                     'host': peer['ip'], 'protocol': 'http', 'port': 8789,
+                     'path': '/', 'enabled': True}]})
+    STATE.write_text(json.dumps({'id': service['id'], 'domain': DOMAIN}))
+    STATE.chmod(0o600)
+    try:
+        SESSION.parent.mkdir(parents=True, exist_ok=True)
+        temporary = SESSION.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'origin': 'https://' + DOMAIN, 'role': 'public-demo'}))
+        temporary.chmod(0o644)
+        os.replace(temporary, SESSION)
+        print('Demo URL: https://' + DOMAIN, flush=True)
+        # REST-managed service avoids the CLI expose stream's renewal timeout.
+        # systemd RuntimeMaxSec and ExecStopPost enforce the session lifetime.
+        while not stop.wait(30):
+            current = api('GET', 'reverse-proxies/services/' + service['id'])
+            if not current.get('enabled'):
+                raise RuntimeError('NetBird demo service was disabled')
+    finally:
+        cleanup()
+
+if __name__ == '__main__':
+    main()

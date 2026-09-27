@@ -32,16 +32,21 @@ The demo is public without a password, as requested by the owner. The management
 console still requires owner authentication. This configuration does not claim the
 competition’s gated-access bonus criterion.
 Install the two service units and start aksharaforge-netbird-demo.service once
-NetBird is connected. The wrapper records the exact generated HTTPS origin in
+NetBird is connected. The wrapper records the exact HTTPS origin in
 /run/aksharaforge-demo/session.json; the frontend rejects requests until that is
 available. It accepts the exact public Host or NetBird's rewritten private target Host,
 and checks the exact public Origin on POSTs before forwarding to the app.
 
-The expose process binds the URL lifetime to the demo session and application.
-Stopping the app, stopping the demo unit, or the 24-hour limit ends exposure.
-NetBird removes the service on graceful stop; failed renewal expires it after
-90 seconds. Starting a new session creates a new URL. These units are not enabled
-at boot and do not change any AWS training time or cost limits.
+The wrapper creates a public reverse-proxy service through the local NetBird
+management API and records its ID outside Git. Its peer target uses WireGuard.
+Stopping the app, stopping the demo unit, or the 24-hour runtime limit deletes
+the service. ExecStopPost retries cleanup even if the wrapper fails. Startup also
+removes an abandoned service before creating the next session. The hostname is
+reused; the service itself exists only during the session. These units are not
+enabled at boot and do not change any AWS training time or cost limits.
+
+The CLI expose stream previously failed with DeadlineExceeded and expired the
+public URL. The REST-managed service removes that renewal dependency.
 
 ## Verified deployment (2026-09-27)
 
@@ -50,7 +55,7 @@ at boot and do not change any AWS training time or cost limits.
 - Scanned upload verification is recorded with the deployment evidence.
 - Public POST /api/provider is rejected; local operator flow still works.
 - Direct public connections to application ports fail.
-- Stopping the demo removes the URL; restarting creates a fresh session.
+- Stopping the demo removes the URL; restarting creates a fresh service at the same hostname.
 
 Sources:
 - https://docs.netbird.io/selfhosted/selfhosted-quickstart
