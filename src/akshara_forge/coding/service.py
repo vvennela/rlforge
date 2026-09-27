@@ -35,6 +35,10 @@ def grade(row,completion,training_reward='tests'):
     if training_reward not in ('tests','components'):raise ValueError('Unknown reward mode')
     try:out=execute(code_from(completion),[t['input'] for t in row['tests']])
     except (ValueError,SyntaxError) as exc:out={'error':type(exc).__name__}
+    return compare_results(row,out,training_reward)
+
+def compare_results(row,out,training_reward='tests'):
+    if training_reward not in ('tests','components'):raise ValueError('Unknown reward mode')
     if not isinstance(out,dict):out={'error':'InvalidEnvelope'}
     results=out.get('results',[])
     if not isinstance(results,list) or len(results)!=len(row['tests']):
