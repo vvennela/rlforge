@@ -250,3 +250,18 @@ def test_revalidating_revised_question_does_not_duplicate_output_instructions(an
     g.validate(packet,'Addition',1)
     assert packet['problems'][0]['prompt']==first
     assert first.count('Return only')==1
+
+
+def test_coding_gallery_pairs_complete_baseline_with_partial_final_evaluation(tmp_path):
+    from akshara_forge.studio.evidence import coding_samples
+    for phase in ('before','after'):(tmp_path/phase).mkdir()
+    before=[{'id':f'case-{i}','completion':str(i)} for i in range(3)]
+    (tmp_path/'before/episodes.jsonl').write_text('\n'.join(map(json.dumps,before)))
+    (tmp_path/'after/episodes.jsonl').write_text(json.dumps(before[0]))
+    samples=coding_samples(tmp_path)
+    assert [r['id'] for r in samples]==['case-0','case-1','case-2']
+    assert samples[0]['after']['id']=='case-0' and samples[1]['after'] is None
+    (tmp_path/'after/episodes.jsonl').write_text(json.dumps(before[1]))
+    with pytest.raises(ValueError,match='pairing'):coding_samples(tmp_path)
+    (tmp_path/'after/episodes.jsonl').write_text('\n'.join([json.dumps(before[0])]*2))
+    with pytest.raises(ValueError,match='Duplicate'):coding_samples(tmp_path)

@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,initialRenderer=null,pointer=null,bridgeSelection=null;
+let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,afterRenderer=null,initialRenderer=null,pointer=null,bridgeSelection=null,programSelection=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
 const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Qwen writes Python implementations of iterative-deepening search. Each program runs against hidden tests in a Vultr sandbox, checking paths, costs, thresholds, traversal order, and edge cases.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
@@ -24,10 +24,19 @@ function renderCase(){
  if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(active==='coding'&&s.before?.mean_field_score!=null){$('run-detail').textContent+=` · Exact field accuracy: ${(100*s.before.mean_field_score).toFixed(1)}% → ${s.after?.mean_field_score!=null?(100*s.after.mean_field_score).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(s.weight_update?.changed_parameters){$('run-detail').textContent+=` · ${s.weight_update.changed_parameters.toLocaleString()} adapter parameters changed`}
- const codeSample=s.sample;
+ const programs=active==='coding'?(s.samples||(s.sample?[s.sample]:[])):[];
+ const codeSample=programs.find(p=>p.id===programSelection)||programs[0];
+ $('program-case-control').hidden=programs.length<2;
+ if(active==='coding'){
+  const selector=$('program-case');
+  const options=programs.map((p,i)=>({id:p.id,label:`Case ${i+1} · ${p.id} · ${p.before.result.passed}/${p.before.result.total} → ${p.after?p.after.result.passed+'/'+p.after.result.total:'pending'}`}));
+  const signature=JSON.stringify(options);
+  if(selector.dataset.signature!==signature){selector.replaceChildren(...options.map(p=>new Option(p.label,p.id)));selector.dataset.signature=signature}
+  if(codeSample){programSelection=codeSample.id;selector.value=codeSample.id}
+ }
  $('program-comparison').hidden=active!=='coding'||!codeSample;
  if(active==='coding'&&codeSample){
-  $('program-label').textContent='FIXED HELD-OUT EXAMPLE / '+codeSample.id;
+  $('program-label').textContent='HELD-OUT PROGRAM / '+codeSample.id;
   for(const phase of ['before','after']){
    const attempt=codeSample[phase];$('program-'+phase).textContent=attempt?.completion||'Final evaluation follows training.';
    $('program-'+phase+'-score').textContent=attempt?`${attempt.result.passed}/${attempt.result.total} tests`:'';
@@ -119,6 +128,7 @@ $('bridge-initial').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x
 $('bridge-initial').addEventListener('pointermove',e=>{if(!pointer)return;camera.yaw+=(e.clientX-pointer.x)*.009;camera.pitch+=(e.clientY-pointer.y)*.009;pointer.x=e.clientX;pointer.y=e.clientY;drawBridge()});
 for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-initial').addEventListener(n,()=>pointer=null);
 $('bridge-initial').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
+$('program-case').addEventListener('change',e=>{programSelection=e.target.value;renderCase()});
 $('bridge-case').addEventListener('change',e=>{bridgeSelection=e.target.value;drawBridge()});
 $('reset-view').onclick=()=>{Object.assign(camera,{yaw:-.65,pitch:.55,zoom:1});drawBridge()};window.addEventListener('resize',drawBridge);
 refresh();initBridge();tex();resumeJob();setInterval(refresh,15000);
