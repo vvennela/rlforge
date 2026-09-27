@@ -77,3 +77,18 @@ def test_final_complete_packet_preserves_strict_json_values():
     assert g.decode_packet('Draft notes {not JSON}\n```json\n{"problems":[{"reference_answer":2}]}\n```')=={'problems':[{'reference_answer':2}]}
     with pytest.raises(ValueError,match='complete environment'):
         g.decode_packet('{"problems":[{"reference_answer":2}')
+
+
+def test_vultr_json_continuation_reassembles_only_new_output(tmp_path,monkeypatch):
+    monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
+    monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','vultr')
+    monkeypatch.setenv('AKSHARA_GENERATOR_MODEL','chosen')
+    monkeypatch.setenv('VULTR_INFERENCE_API_KEY','test')
+    def transport(req):
+        if req.method=='GET':return httpx.Response(200,json={'data':[{'id':'chosen'}]})
+        payload=json.loads(req.content)
+        assert payload['continue_final_message'] is True
+        assert payload['messages'][-1]=={'role':'assistant','content':'{"problems":['}
+        return httpx.Response(200,json={'model':'chosen','choices':[{'finish_reason':'stop','message':{'content':'{"id":"one"}]}'} }]})
+    with httpx.Client(transport=httpx.MockTransport(transport)) as c:
+        assert g.call_model('source',tmp_path,c,json_prefix=True)=={'problems':[{'id':'one'}]}

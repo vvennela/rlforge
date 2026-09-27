@@ -7,8 +7,8 @@ before the baseline. The original curated paper questions remain separate.
 
 The dataset contains 80 training specifications and 20 held-out specifications.
 Each is a unique combination of traversal order, initial bound, trace filters,
-and output fields. Each program faces 16 tests: four common edge-case patterns
-and twelve independently seeded graph inputs. Test graphs include cycles,
+and output fields. Each program faces 24 tests: four common edge-case patterns, twelve
+independently seeded graph inputs, and eight GLM-generated adversarial inputs. Test graphs include cycles,
 unreachable goals, weighted edges, admissible heuristics, ties, and start=goal.
 The independent Dijkstra tests certify the reference costs; hand-worked tests
 certify cutoff ordering and trace semantics.

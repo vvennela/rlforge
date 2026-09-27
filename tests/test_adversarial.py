@@ -81,3 +81,24 @@ def test_untrusted_program_cannot_supply_its_own_score(monkeypatch,forged):
     from akshara_forge.coding import service
     monkeypatch.setattr(service,'execute',lambda *a,**kw:forged)
     assert service.grade({'tests':[{'input':{},'expected':1}]},'code')['reward']==0
+
+
+def test_adversarial_dataset_freezes_only_after_reference_and_mutation_gates(tmp_path,monkeypatch):
+    from akshara_forge.coding import adversarial as a
+    from akshara_forge.coding.tasks import generate
+    source=tmp_path/'source.json';source.write_text('{"cards":[]}');original=tmp_path/'original';generate(original,source)
+    counter=[0]
+    def provider(prompt,folder,**kwargs):
+        counter[0]+=1;items=[]
+        for p in cases(counter[0])[:2]:
+            def label(n):return str(counter[0])+'_'+n
+            p={'graph':{label(n):[[label(c),w] for c,w in es] for n,es in p['graph'].items()},'heuristic':{label(n):v for n,v in p['heuristic'].items()},'start':label(p['start']),'goal':label(p['goal'])}
+            items.append({'input':p,'failure_mode':'boundary and tie handling','reason':'Distinguishes cutoff and traversal mistakes'})
+        return {'problems':items}
+    monkeypatch.setattr(a,'call_model',provider)
+    target=tmp_path/'adversarial';a.build(original,target)
+    manifest=json.loads((target/'manifest.json').read_text())
+    assert manifest['tests_per_task']==24 and counter[0]==8
+    audit=json.loads((target/'adversarial-audit.json').read_text())
+    assert not audit['survivors'] and all(c['mutants_killed'] for cs in audit['glm_case_coverage'].values() for c in cs)
+    with pytest.raises(ValueError,match='Frozen'):a.build(original,target,resume=True)

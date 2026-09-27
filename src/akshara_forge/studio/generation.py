@@ -18,9 +18,10 @@ def config():
     return {'provider':s['provider'],'model':s['model'],'configured':bool(s['key'] and s['model'])}
 
 
-def call_model(prompt, folder, client=None, *, system=SYSTEM):
+def call_model(prompt, folder, client=None, *, system=SYSTEM, json_prefix=False):
     c=config()
     if not c['configured']:raise ValueError('Connect the generation API key on the server to start generation.')
+    prefix=''
     owned=client is None; client=client or httpx.Client(timeout=240)
     try:
         if c['provider']=='openai':
@@ -33,6 +34,10 @@ def call_model(prompt, folder, client=None, *, system=SYSTEM):
             selected=next((m for m in catalog.json()['data'] if m['id']==c['model']),None)
             if not selected:raise ValueError('Selected model is not in the Vultr inference catalog.')
             req={'model':c['model'],'messages':[{'role':'system','content':system},{'role':'user','content':prompt}],'max_tokens':32768}
+            if json_prefix:
+                prefix='{"problems":['
+                req['messages'].append({'role':'assistant','content':prefix})
+                req['continue_final_message']=True
             if selected.get('reasoning') and not selected['reasoning'].get('mandatory',True):
                 req['reasoning']={'enabled':False}  # Structured generation must finish the JSON packet.
         folder.mkdir(parents=True,exist_ok=True)
@@ -47,7 +52,7 @@ def call_model(prompt, folder, client=None, *, system=SYSTEM):
             if raw.get('model') not in (c['model'],selected.get('hugging_face_id')):raise ValueError('Unexpected returned model identity.')
             if raw['choices'][0].get('finish_reason')!='stop':raise ValueError('Generation reached its output limit.')
             content=raw['choices'][0]['message']['content']
-        return decode_packet(content)
+        return decode_packet(prefix+content)
     finally:
         if owned:client.close()
 
