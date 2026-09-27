@@ -40,6 +40,8 @@ function renderCase(){
   for(const phase of ['before','after']){
    const attempt=codeSample[phase];$('program-'+phase).textContent=attempt?.completion||'Final evaluation follows training.';
    $('program-'+phase+'-score').textContent=attempt?`${attempt.result.passed}/${attempt.result.total} tests`:'';
+   const fields=attempt?.result.field_checks||[];
+   $('program-'+phase+'-fields').textContent=fields.length?'Exact fields / '+Object.keys(fields[0]).map(key=>`${key}: ${fields.filter(f=>f[key]===true).length}/${fields.length}`).join(' · '):'';
   }
  }
  if(active==='engineering'){requestAnimationFrame(drawBridge)}
