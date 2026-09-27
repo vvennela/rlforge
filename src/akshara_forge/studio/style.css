@@ -31,3 +31,5 @@ main>header>span{display:block;padding:0 12px;font-size:9px}
 .program-fields{margin:0;padding:0 16px 12px;color:var(--muted);font:11px/1.7 "Courier New",monospace}.program-fields:empty{display:none}
 
 .benchmark-grid{display:grid;grid-template-columns:1fr 1fr}.benchmark-grid>div{padding:22px;display:grid;gap:12px}.benchmark-grid>div+div{border-left:1px solid var(--line)}.benchmark-grid span,.benchmark-grid small,.benchmark-note{color:var(--muted);font-size:12px}.benchmark-grid strong{font-size:28px;letter-spacing:-1px}.benchmark-note{padding:0 22px 20px;margin:0;line-height:1.7}@media(max-width:700px){.benchmark-grid{grid-template-columns:1fr}.benchmark-grid>div+div{border-left:0;border-top:1px solid var(--line)}}
+
+.bridge-reference{margin:0;border-top:1px solid var(--line)}.bridge-reference .specimen-label a{color:var(--accent)}.bridge-reference-image{display:block;background:#fff;cursor:zoom-in}.bridge-reference-image img{display:block;width:100%;height:auto}.bridge-reference-caption{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 20px;font-size:11px;color:var(--muted)}.bridge-reference-caption a{color:var(--accent)}
