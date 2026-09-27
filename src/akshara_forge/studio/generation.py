@@ -41,6 +41,7 @@ def call_model(prompt, folder, client=None, *, system=SYSTEM, json_prefix=False,
                 prefix='{"problems":['
                 req['messages'].append({'role':'assistant','content':prefix})
                 req['continue_final_message']=True
+                req['temperature']=0.2
             if selected.get('reasoning') and not selected['reasoning'].get('mandatory',True):
                 req['reasoning']={'enabled':False}  # Structured generation must finish the JSON packet.
         folder.mkdir(parents=True,exist_ok=True)
@@ -211,7 +212,7 @@ class GenerationJobs:
                         break
                     if attempt==5:raise ValueError(error or 'Generation could not produce a fully verified batch.')
                     feedback={'error':error,'rejected_packet':packet if batch is None else {'problems':[r for r in batch if r.get('id') not in accepted]},
-                        'instruction':'Generate only the requested number of replacements for rejected problems. Previously accepted problems are fixed. Select an existing source passage ID and fully specify finite worked examples. Do not lower verification requirements.'}
+                        'instruction':'Generate only the requested number of replacements for rejected problems. Replace a repeatedly disputed problem with a different, fully specified instance; do not repeat it. Previously accepted problems are fixed. Select an existing source passage ID and fully specify finite worked examples. Do not lower verification requirements.'}
                     if audit:
                         feedback['review_failures']=[{'id':r['id'],'failures':r['failures'],'review_reason':r['independent_solution'].get('reason')} for r in audit['problems'] if not r['passed']]
                     self.status(folder,status='generating',completed=len(rows)+len(accepted),reviewed=len(rows)+len(accepted),

@@ -91,6 +91,7 @@ def test_vultr_json_continuation_reassembles_only_new_output(tmp_path,monkeypatc
         if req.method=='GET':return httpx.Response(200,json={'data':[{'id':'chosen'}]})
         payload=json.loads(req.content)
         assert payload['continue_final_message'] is True
+        assert payload['temperature']==0.2
         assert payload['messages'][-1]=={'role':'assistant','content':'{"problems":['}
         return httpx.Response(200,json={'model':'chosen','choices':[{'finish_reason':'stop','message':{'content':'{"id":"one"}]}'} }]})
     with httpx.Client(transport=httpx.MockTransport(transport)) as c:
