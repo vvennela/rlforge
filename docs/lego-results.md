@@ -8,7 +8,7 @@ The final adapter follows 50 optimizer batches, with two sampled eight-turn traj
 
 All twenty frozen held-out cases use identical greedy decoding, tools, feedback, eight-turn limits, and 256-token turn budgets before and after. This benchmark measures missing or misplaced bridge-upright repairs; the surrounding bridge is fixed. The final planned checkpoint was evaluated once, without selecting it from held-out scores.
 
-The website exposes every case in frozen dataset order, its original structure, both model outputs, and recorded actions and rewards.
+The website exposes every case in frozen dataset order, the trained repair output, and both models’ recorded actions and rewards. Its left-hand viewer shows the original deck-and-supports prototype, explicitly distinguished from the selected repair task.
 
 | Case | Base success | Trained success | Base overlap | Trained overlap |
 |---|---:|---:|---:|---:|

@@ -9,7 +9,8 @@ live walkthrough. Show OCR/source artifacts and generation progress. The 100-pro
 option remains available; the trained case studies use their frozen 80/20 datasets.
 
 **0:25–1:05 — The environment.** Open Engineering. Rotate the two bridge views:
-base Qwen and trained Qwen. Explain the eight-turn tool budget
+the original deck-and-supports structure and a trained single-post repair example.
+These are distinct task states; the recorded baseline remains available in the action traces. Explain the eight-turn tool budget
 and geometry/connectivity rewards. Show 3/20 → 7/20 successful repairs (+20pp)
 and 36.7% → 71.1% mean target overlap after fifty batches. Use the displayed completed holdout scores;
 partial results remain labeled as such. The gallery opens on the first newly solved case, labeled “Newly solved example.”

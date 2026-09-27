@@ -100,6 +100,9 @@ async function resumeJob(){
 $('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);rememberJob(s.id);await followJob(s)}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
 function drawBridge(){
  if(!renderer||!bridgeState||page!=='engineering')return;
+ const deckTop=bridgeState.task.grid.deck_z+bridgeState.task.grid.deck_layers;
+ const originalStructure={...bridgeState,bricks:bridgeState.bricks.filter(b=>b.z<deckTop)};
+ $('bridge-before-label').textContent='Original structure · deck and supports';
  const samples=evidence.engineering?.samples||[evidence.engineering?.sample].filter(Boolean);
  const featured=samples.find(s=>s.after?.success&&!s.before.success);
  const sample=samples.find(s=>s.id===bridgeSelection)||featured||samples[0];
@@ -112,8 +115,7 @@ function drawBridge(){
  if(sample){
   const scene=phase=>({task:sample.task,palette:sample.palette,bricks:[...sample.fixed,...(sample[phase]?.editable_bricks||[])]});
   $('bridge-sample-label').textContent=(sample===featured?'NEWLY SOLVED EXAMPLE / ':'HELD-OUT REPAIR / ')+sample.id;
-  $('bridge-before-label').textContent=`Base Qwen · ${(100*sample.before.gap_iou).toFixed(1)}% target overlap`;
-  $('bridge-after-label').textContent=sample.after?`Trained Qwen · ${(100*sample.after.gap_iou).toFixed(1)}% target overlap`:'After training';
+  $('bridge-after-label').textContent=sample.after?`Trained Qwen · single-post repair · ${(100*sample.after.gap_iou).toFixed(1)}% overlap`:'After training';
   $('bridge-after-panel').hidden=false;$('paired-bridge').classList.add('has-pair');
   $('bridge-after-pending').hidden=!!sample.after;$('bridge-after').hidden=!sample.after;
   $('bridge-target').textContent=`Target post: (${sample.target.x}, ${sample.target.y}), height ${sample.target.top-sample.target.bottom} plates`;
@@ -121,8 +123,8 @@ function drawBridge(){
    const turns=sample.traces?.[phase];
    $('bridge-'+phase+'-trace').textContent=turns?turns.map(t=>`Turn ${t.turn} · reward ${t.reward.toFixed(4)}\n${JSON.stringify(t.actions,null,2)}${t.error?'\nError: '+t.error:''}`).join('\n\n'):'Evaluation pending.';
   }
-  renderer.render(scene('before'),camera);if(sample.after&&afterRenderer)afterRenderer.render(scene('after'),camera);
- }else renderer.render(bridgeState,camera);
+  renderer.render(originalStructure,camera);if(sample.after&&afterRenderer)afterRenderer.render(scene('after'),camera);
+ }else renderer.render(originalStructure,camera);
 }
 async function initBridge(){try{const r=await fetch('/api/bridge-sample');bridgeState=await r.json();$('bridge').dataset.theme='dark';renderer=new BrickRenderer($('bridge'));$('bridge-after').dataset.theme='dark';afterRenderer=new BrickRenderer($('bridge-after'));drawBridge()}catch(e){$('bridge').setAttribute('aria-label',e.message)}}
 $('bridge').addEventListener('pointerdown',e=>{pointer={id:e.pointerId,x:e.clientX,y:e.clientY};$('bridge').setPointerCapture(e.pointerId)});
