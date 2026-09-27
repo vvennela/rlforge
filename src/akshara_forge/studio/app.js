@@ -45,3 +45,17 @@ refresh();initBridge();tex();setInterval(refresh,15000);
 let loadedModels=false;
 document.querySelector('.provider-settings').addEventListener('toggle',async e=>{if(!e.target.open||loadedModels)return;try{const r=await fetch('/api/models'),d=await r.json();if(!r.ok)throw Error(d.error);$('provider-model').replaceChildren(new Option('Choose a generation model',''));for(const m of d.models)$('provider-model').add(new Option(m.name,m.id));$('provider-model').value='glm-5.3';loadedModels=true}catch(e){$('connection-message').textContent=e.message}});
 $('provider-form').addEventListener('submit',async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{const r=await fetch('/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('provider-key').value,model:$('provider-model').value})}),d=await r.json();if(!r.ok)throw Error(d.error);$('provider-key').value='';$('connection-message').textContent='Connection saved. Upload a document to generate.';await refresh()}catch(e){$('connection-message').textContent=e.message}finally{button.disabled=false}});
+
+// Reveal each section once; live score refreshes never restart the animation.
+if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+ const revealTargets=document.querySelectorAll('.intro, main .section-label, #upload-form, .tabs, .case-heading, .case-copy, .metrics, .comparison, .specimen, .case-foot, .method-row, main footer');
+ const revealObserver=new IntersectionObserver(entries=>{
+  for(const entry of entries)if(entry.isIntersecting){entry.target.classList.add('revealed');revealObserver.unobserve(entry.target)}
+ },{threshold:0.08,rootMargin:'0px 0px -28px 0px'});
+ for(const el of revealTargets){
+  const rect=el.getBoundingClientRect();
+  el.classList.add('scroll-reveal');
+  if(rect.height && rect.top<window.innerHeight-28 && rect.bottom>0)el.classList.add('revealed');
+  else revealObserver.observe(el);
+ }
+}
