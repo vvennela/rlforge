@@ -17,7 +17,9 @@ all twenty cases in dataset order, including unchanged repairs and failures. For
 80 updates on Qwen 2.5 7B. Explain its ten exact-answer questions and ten
 teacher-graded proofs. Show Coding’s recorded status: 24 hidden tests per program,
 including adversarial GLM cases, independent reference solvers, and eight mutation
-checks. Show final coding scores only once both evaluations complete.
+checks. The completed 80-batch coding run stayed at 0/20; exact-field accuracy fell
+from 2.36% to 0.42%. Show the recorded programs and explain that the framework
+measures unsuccessful training runs as well as gains.
 
 **1:45–2:25 — Real execution.** Open the engineering workspace and run a small
 bridge repair through Vultr Serverless Inference. Show the resulting geometry and

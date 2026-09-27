@@ -8,7 +8,7 @@ RLForge connects document extraction, task generation, sandboxed execution, rewa
 
 - **Mathematics:** After 80 training updates, Qwen improved from **2/20 to 5/20** on the same held-out paper-derived questions: **+15 percentage points**. Ten questions use exact-answer checks; ten use teacher-graded proofs.
 - **Engineering:** An eight-turn LEGO bridge environment returns feedback on geometry, collisions, and connectivity. After 50 batches, successful repairs rose **3/20 → 7/20 (+20pp)**; mean geometry overlap rose **36.7% → 71.1%**.
-- **Coding:** Qwen writes IDA* search implementations for execution in isolated containers. Its frozen suite includes GLM-generated adversarial cases, independent reference checks, and mutation testing. The baseline completed at **0/20**; 80 training batches and paired evaluation are underway.
+- **Coding:** Qwen writes IDA* search implementations for execution in isolated containers. Its frozen suite includes GLM-generated adversarial cases, independent reference checks, and mutation testing. After 80 batches, full correctness stayed **0/20 → 0/20**; exact-field accuracy fell **2.36% → 0.42%**. This run produced no coding uplift.
 
 Training traces, checkpoints, and evaluation protocols make each result inspectable. Held-out tasks stay separate from training; final scores compare identical evaluation conditions.
 
@@ -16,4 +16,4 @@ Training traces, checkpoints, and evaluation protocols make each result inspecta
 
 Automate the full path from engineering drawings, algorithms, and scientific papers to reusable learning environments. Expand the task catalog, strengthen independent verifiers, and measure transfer to unseen problems and external benchmarks.
 
-See the [pipeline guide](docs/pipeline-guide.md), [web studio](docs/studio.md), and [coding experiment](docs/coding-experiment.md), and [LEGO results](docs/lego-results.md) for setup and protocols.
+See the [pipeline guide](docs/pipeline-guide.md), [web studio](docs/studio.md), and [coding results](docs/coding-results.md), and [LEGO results](docs/lego-results.md) for setup and protocols.
