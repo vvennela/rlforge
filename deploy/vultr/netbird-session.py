@@ -24,7 +24,9 @@ try:
             temp.chmod(0o644)
             os.replace(temp, session)
             print('Demo URL: '+match[1], flush=True)
-        # Do not echo arbitrary CLI diagnostics that might include credentials.
+        elif any(word in line.lower() for word in ('error', 'failed', 'unable')):
+            print('NetBird expose: '+line.strip()[:300], flush=True)
+        # This public expose command has no authentication arguments.
     raise SystemExit(child.wait())
 finally:
     session.unlink(missing_ok=True)

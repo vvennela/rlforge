@@ -33,6 +33,8 @@ def call_model(prompt, folder, client=None):
             selected=next((m for m in catalog.json()['data'] if m['id']==c['model']),None)
             if not selected:raise ValueError('Selected model is not in the Vultr inference catalog.')
             req={'model':c['model'],'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt}],'max_tokens':14000}
+            if selected.get('reasoning',{}).get('supports_max_tokens'):
+                req['reasoning']={'max_tokens':4096}  # Reserve output space for the full problem batch.
         folder.mkdir(parents=True,exist_ok=True)
         (folder/'request.json').write_text(json.dumps({'provider':c['provider'],'request':req},indent=2))
         r=client.post(url,headers={'Authorization':'Bearer '+key},json=req);r.raise_for_status();raw=r.json()
