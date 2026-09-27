@@ -8,6 +8,10 @@ def test_frozen_pilot_oracle_and_splits(tmp_path):
     path=tmp_path/'dataset'; build_dataset(path)
     train=json.loads((path/'train.json').read_text()); test=json.loads((path/'heldout.json').read_text())
     assert len(train)==80 and len(test)==20
+    for level in range(1,5):
+        assert sum(r['curriculum']['level']==level for r in train)==20
+        assert sum(r['curriculum']['level']==level for r in test)==5
+    assert all(len(r['missing'])==r['curriculum']['level'] for r in train+test)
     assert not {r['geometry_signature'] for r in train}&{r['geometry_signature'] for r in test}
     assert len({json.dumps(r['prompt']) for r in train+test})==100
     for row in train+test:

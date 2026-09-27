@@ -37,3 +37,14 @@ def test_real_curriculum_solutions_and_isolation(tmp_path):
     assert not inputs['train']&inputs['heldout']
     assert 'single incorrect' in rows[0]['prompt'][1]['content']
     with pytest.raises(ValueError,match='immutable'):generate(dest,source)
+
+
+@pytest.mark.parametrize('module',['tasks','feedback'])
+def test_public_generator_commands_default_to_curriculum(tmp_path,module):
+    import os,subprocess,sys
+    source=tmp_path/'source.json';source.write_text('{"cards":[]}');output=tmp_path/'out'
+    args=['--output',str(output),'--source',str(source)] if module=='tasks' else ['generate','--dataset',str(output),'--source',str(source)]
+    subprocess.run([sys.executable,'-m','akshara_forge.coding.'+module,*args],check=True,capture_output=True,text=True)
+    manifest=json.loads((output/'manifest.json').read_text())
+    assert manifest['curriculum']['version']=='easy-to-hard-v1'
+    assert manifest['train']==80 and manifest['heldout']==20

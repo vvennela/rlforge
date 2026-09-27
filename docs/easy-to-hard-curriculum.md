@@ -2,7 +2,7 @@
 
 New uploads use four explicit task contracts: foundation, guided practice,
 application and composition. Each contract specifies the number of concepts,
-scaffolding and edge cases appropriate to its level. The generator receives the
+scaffolding and edge cases appropriate to its level. For paper-generated numerical tasks, the reviewer reports an atomic-operation count and whether a worked example/partial solution is present; controller gates enforce 1, 2–3, 3–5 and 4–8 operations respectively, remove scaffolding at levels three/four, and require two concepts at level four. The generator receives the
 contract; a separate blind reviewer must approve both the answer and stage fit.
 These are designed difficulty levels, not claims about measured learner ability.
 
@@ -32,3 +32,5 @@ recorded two-hour compute cap reserves forty minutes for final evaluation.
 New interactive LEGO datasets increase the missing-piece count from one to four;
 the final level also requires correcting a misplaced piece. Frozen older datasets
 and published scores are unchanged.
+
+Public coding generation commands now default to the curriculum. The `--legacy-flat` option reproduces historical flat datasets. Both one-turn and interactive LEGO generators stratify new tasks by repair size; only the interactive final stage adds misplaced-piece correction.

@@ -169,7 +169,7 @@ def solve(p):
     if train_inputs&held_inputs:raise ValueError('Input leakage across splits')
     for split in ('train','heldout'):write(dest/f'{split}.json',[r for r in rows if r['split']==split])
     write(dest/'manifest.json',{'kind':'coding_easy_to_hard','train':80,'heldout':20,'development_tests':6,'private_tests':24,'turns':3,
-        'curriculum':curriculum_manifest(100),'source_manifest_sha256':digest(Path(source)/'manifest.json'),
+        'curriculum':curriculum_manifest(100),'source_manifest_sha256':digest(Path(source)/'manifest.json' if Path(source).is_dir() else Path(source)),
         'scope':'Held-out input sets and task variants within practiced skill families; not unseen-algorithm generalization.',
         'cross_split_input_overlap':len(train_inputs&held_inputs),'reference_agreement':True,'constant_mutations_rejected':all(all(v) for v in mutants.values()),
         'sha256':{s:digest(dest/f'{s}.json') for s in ('train','heldout')}})

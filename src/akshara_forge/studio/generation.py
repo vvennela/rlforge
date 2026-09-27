@@ -162,7 +162,7 @@ class GenerationJobs:
             self.busy=True
         id=uuid.uuid4().hex;folder=self.root/id;folder.mkdir()
         (folder/name).write_bytes(data)
-        self.status(folder,status='extracting',filename=name,count=count,completed=0,provider=config(),curriculum=curriculum_manifest(count))
+        self.status(folder,status='extracting',filename=name,count=count,completed=0,provider=config(),curriculum=curriculum_manifest(count),curriculum_review_policy='atomic-operations-and-scaffolding-v2')
         threading.Thread(target=self.run,args=(folder,name,count),daemon=True).start()
         return self.read(id)
     def run(self,folder,name,count,*,recovery=None):
@@ -239,7 +239,7 @@ class GenerationJobs:
                         packet=model_call(json.dumps({'request':f'Generate {len(pending)} distinct problems for batch {offset//batch_size+1}.',
                             'source_passages':passages(source),'source_artifacts':source_artifacts,
                             'curriculum':slot(offset,count) if curriculum else None,
-                            'difficulty_instruction':'Every problem must satisfy this stage; include a scaffold when requested. Do not jump to the complete algorithm at foundation level.' if curriculum else None,
+                            'difficulty_instruction':('STRICT: level 1 asks exactly one atomic operation (one addition, multiplication, comparison or exponentiation), with a worked example. Do not ask a sum of powers at level 1. Level 2 asks 2–3 operations and supplies a scaffold. Level 3 asks 3–5 operations with NO worked example or partial solution. Level 4 combines at least two source concepts across 4–8 operations with NO worked example or partial solution. Define all inputs and conventions, but do not solve them in the question. The independent reviewer counts operations and rejects scaffolding at levels 3–4.') if curriculum else None,
                             'previous_prompts':[r['prompt'] for r in rows+list(accepted.values())],
                             'revision_feedback':feedback}),call_folder)
                         batch=validate(packet,source,len(pending))
@@ -310,7 +310,9 @@ class GenerationJobs:
             from .adversarial import check_exported_runtime
             runtime_audit=check_exported_runtime(bundle,audits)
             manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'source evidence, blind solution cross-check, and adversarial verifier probes passed','runtime_audit':runtime_audit,'accepted_review_batches':len(audits),'review_calls':sum(1 for p in (folder/'calls').glob('**/request.json') if 'blind-review' in p.parts),'adversarial_cases':sum(len(r['verifier_tests']) for a in audits for r in a['problems']),'review_method':'Separate GLM call without author answers; same-model agreement, not formal proof','learner_mount':'learner/','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
-            if curriculum:manifest['curriculum']=curriculum
+            if curriculum:
+                manifest['curriculum']=curriculum
+                manifest['curriculum_review_policy']=self.read(folder.name).get('curriculum_review_policy','stage-fit-v1')
             ocr=self.read(folder.name).get('ocr')
             if ocr:manifest['source_evidence']=ocr
             (bundle/'manifest.json').write_text(json.dumps(manifest,indent=2))
@@ -319,7 +321,8 @@ class GenerationJobs:
                 if (folder/'source-evidence.zip').exists():z.write(folder/'source-evidence.zip','source-evidence.zip',compress_type=zipfile.ZIP_STORED)
                 for p in bundle.rglob('*'):
                     if p.is_file():z.write(p,str(p.relative_to(bundle)))
-            self.status(folder,status='ready',message='Environment packaged: source checks, blind solution review, and adversarial reward tests passed.',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split')} for r in rows[:3]])
+            preview_rows=[next(r for r in rows if r['curriculum']['level']==level) for level in range(1,5)] if curriculum else rows[:3]
+            self.status(folder,status='ready',message='Environment packaged: source checks, blind solution review, and adversarial reward tests passed.',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split','curriculum') if k in r} for r in preview_rows])
         except Exception as exc:
             message=f'Provider request failed (HTTP {exc.response.status_code}).' if isinstance(exc,httpx.HTTPStatusError) else str(exc)[:250]
             self.status(folder,status='failed',message=message)

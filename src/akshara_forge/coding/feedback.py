@@ -101,6 +101,10 @@ def serve(dataset,output,token_file,port):
     ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('command',choices=['generate','serve']);p.add_argument('--dataset',type=Path,required=True);p.add_argument('--source',type=Path);p.add_argument('--output',type=Path);p.add_argument('--token-file',type=Path);p.add_argument('--port',type=int,default=8775);a=p.parse_args()
-    if a.command=='generate':generate(a.source,a.dataset)
+    p=argparse.ArgumentParser();p.add_argument('command',choices=['generate','serve']);p.add_argument('--dataset',type=Path,required=True);p.add_argument('--source',type=Path);p.add_argument('--output',type=Path);p.add_argument('--token-file',type=Path);p.add_argument('--port',type=int,default=8775);p.add_argument('--legacy-flat',action='store_true',help='Reproduce the old full-algorithm-only dataset');a=p.parse_args()
+    if a.command=='generate':
+        if a.legacy_flat:generate(a.source,a.dataset)
+        else:
+            from .curriculum import generate as generate_curriculum
+            generate_curriculum(a.dataset,a.source)
     else:serve(a.dataset,a.output,a.token_file,a.port)

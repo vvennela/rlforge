@@ -70,4 +70,8 @@ def generate(dest,source):
     (dest/'manifest.json').write_text(json.dumps(manifest,indent=2))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--source',type=Path,required=True);a=p.parse_args();generate(a.output,a.source)
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--source',type=Path,required=True);p.add_argument('--legacy-flat',action='store_true',help='Reproduce the original frozen experiment generator');a=p.parse_args()
+    if a.legacy_flat:generate(a.output,a.source)
+    else:
+        from .curriculum import generate as generate_curriculum
+        generate_curriculum(a.output,a.source)

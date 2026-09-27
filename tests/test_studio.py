@@ -20,7 +20,7 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
         assert json_prefix is True
         if system!=g.SYSTEM:
             request=json.loads(prompt)
-            return {'problems':[{'id':r['id'],'unambiguous':True,'difficulty_appropriate':True,'difficulty_reason':'One addition on explicit inputs.','reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}
+            return {'problems':[{'id':r['id'],'unambiguous':True,'difficulty_appropriate':True,'difficulty_reason':'Fits stage.', 'atomic_operations':{1:1,2:2,3:3,4:4}[request['difficulty_contracts'][r['id']]['level']], 'scaffold_present':request['difficulty_contracts'][r['id']]['level']<=2, 'concepts_used':['addition','multiplication'],'reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}
         rows=[]
         for _ in range(int(json.loads(prompt)['request'].split()[1])):
             counter[0]+=1

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .environment import BRIDGE, BrickEnvironment, cells, evaluate, fingerprint, reference
 from .worker import PALETTE, apply
+from ..curriculum import slot, manifest as curriculum_manifest
 
 SYSTEM = '''Repair the LEGO-style bridge with one JSON tool transaction. Return ONLY {"actions":[{"tool":"place","brick":{"id":"new1","part":"brick_1x1","x":0,"y":0,"z":9,"rotation":0}}]}. Use unique new IDs. Coordinates and rotation must be integers. x/y are studs; z is plate heights. The part brick_1x1 measures 1x1x3; plate_1x1 measures 1x1x1. Other parts are allowed but must fit the required shape exactly. Rotations are 0 or 90. Existing pieces are locked. Fill each missing upright from its current top up to its required top (exclusive), without overlaps, floating pieces, or extra material. At most 16 place actions. Do not explain your answer.'''
 
@@ -55,18 +56,19 @@ def make_case(index, spec, split):
 def build_dataset(output):
     output=Path(output)
     if output.exists(): raise ValueError('Dataset path already exists; do not overwrite frozen data')
-    rng=random.Random(20260927); specs=set()
-    while len(specs)<100:
-        length=rng.choice(range(24,47,2)); left=rng.randint(5,10); right=length-rng.randint(7,11)
-        specs.add((length,left,right,rng.randint(13,22),rng.randint(16,25),rng.choice([0,5]),rng.randrange(2),rng.randint(1,4)))
-    specs=sorted(specs); rng.shuffle(specs)
-    rows=[make_case(i,s,'train' if i<80 else 'heldout') for i,s in enumerate(specs)]
-    # Prevent identical observable repair tasks from crossing the split.
-    prompts=[fingerprint(r['prompt']) for r in rows]
-    if len(set(prompts))!=len(rows): raise ValueError('Duplicate prompt; revise deterministic generation before training')
+    rng=random.Random(20260927); specs=set();rows=[];prompts=set()
+    while len(rows)<100:
+        i=len(rows);assigned=slot(i,100);split=assigned.pop('split');level=assigned['level']
+        length=rng.choice(range(24,47,2));left=rng.randint(5,10);right=length-rng.randint(7,11)
+        spec=(length,left,right,rng.randint(13,25),rng.randint(16,26),rng.choice([0,5]),rng.randrange(2),level)
+        if spec in specs:continue
+        row=make_case(i,spec,split);key=fingerprint(row['prompt'])
+        if len(row['missing'])!=level or key in prompts:continue
+        assigned['requirements']=f'Place exactly {level} missing pieces in one upright; keep exact target geometry, connectivity and collision checks.'
+        row['curriculum']=assigned;rows.append(row);specs.add(spec);prompts.add(key)
     for split in ['train','heldout']:
         write(output/f'{split}.json',[r for r in rows if r['split']==split])
-    write(output/'manifest.json',{'seed':20260927,'train':80,'heldout':20,'kind':'synthetic_bridge_upright_repair',
+    write(output/'manifest.json',{'seed':20260927,'train':80,'heldout':20,'kind':'synthetic_bridge_upright_repair','curriculum':curriculum_manifest(100),
           'reward':'0.8 added-geometry IoU with missing target + 0.2 full success; multiply by 0.1 if collisions or disconnected',
           'scope':'One-turn repair of a missing upper upright, not complete construction or automatic drawing extraction.',
           'sha256':{s:hashlib.sha256((output/f'{s}.json').read_bytes()).hexdigest() for s in ['train','heldout']}})

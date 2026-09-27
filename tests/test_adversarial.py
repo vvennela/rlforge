@@ -138,3 +138,13 @@ def test_advanced_task_cannot_pass_foundation_label(tmp_path):
         return packet
     with pytest.raises(ValueError,match='rejected'):review([r],'Addition',tmp_path,provider)
     assert 'difficulty contract' in (tmp_path/'audit.json').read_text()
+
+
+@pytest.mark.parametrize('level,operations,scaffold,concepts',[(1,5,True,['sum']),(3,4,True,['sum']),(4,5,False,['sum'])])
+def test_difficulty_gate_checks_evidence_even_if_reviewer_says_appropriate(tmp_path,level,operations,scaffold,concepts):
+    r=row();r['curriculum']={'level':level}
+    def provider(prompt,folder,**kw):
+        packet=reviewer()(prompt,folder,**kw)
+        packet['problems'][0].update(difficulty_appropriate=True,difficulty_reason='Claimed fit',atomic_operations=operations,scaffold_present=scaffold,concepts_used=concepts)
+        return packet
+    with pytest.raises(ValueError,match='rejected'):review([r],'Addition',tmp_path,provider)

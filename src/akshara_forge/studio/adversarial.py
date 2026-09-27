@@ -29,7 +29,7 @@ def review(rows, source, folder, call_model):
         'response_contract':'Return problems as a flat array of review objects, one per supplied ID. Never wrap the array in another array.'}
     if any('curriculum' in r for r in rows):
         request['difficulty_contracts']={r['id']:r['curriculum'] for r in rows if 'curriculum' in r}
-        request['difficulty_review']='For each item also return difficulty_appropriate (boolean) and difficulty_reason. Check that the actual question obeys its stage requirements, including required scaffolding, number of concepts and input complexity. Reject an advanced task labeled foundation.'
+        request['difficulty_review']='For each item also return difficulty_appropriate (boolean) and difficulty_reason. Also return atomic_operations (integer count of arithmetic, comparison or algorithmic operations needed to solve this concrete instance), scaffold_present (boolean: worked example or partial solution, not merely definitions/input data), and concepts_used (array of distinct source methods or rules). Count a sum of four powers as multiple operations, never as one formula substitution. Level 1 must have exactly 1 operation and scaffold_present:true; level 2 requires 2–3 operations and a scaffold; level 3 requires 3–5 operations and scaffold_present:false; level 4 requires 4–8 operations, scaffold_present:false, and at least two distinct concepts. A worked example at levels 3–4 is an automatic failure even if the answer is correct. Reject incompatible tasks regardless of their labels.'
     for attempt in range(3):
         destination=folder/'blind-review' if attempt==0 else folder/'blind-review'/f'schema-retry-{attempt}'
         packet=call_model(json.dumps(request),destination,system=REVIEW_SYSTEM)
@@ -49,7 +49,12 @@ def review(rows, source, folder, call_model):
     for row in rows:
         check = by_id[row['id']]
         failure = []
-        if 'curriculum' in row and (check.get('difficulty_appropriate') is not True or not check.get('difficulty_reason')):failure.append('task does not satisfy its difficulty contract')
+        if 'curriculum' in row:
+            level=row['curriculum']['level'];lo,hi={1:(1,1),2:(2,3),3:(3,5),4:(4,8)}[level]
+            operations=check.get('atomic_operations');concepts=check.get('concepts_used',[])
+            valid=(check.get('difficulty_appropriate') is True and bool(check.get('difficulty_reason')) and type(operations) is int and lo<=operations<=hi and check.get('scaffold_present') is (level<=2))
+            if level==4:valid=valid and isinstance(concepts,list) and all(isinstance(c,str) for c in concepts) and len(set(concepts))>=2
+            if not valid:failure.append('task does not satisfy its difficulty contract')
         if check.get('unambiguous') is not True:failure.append('ambiguous or unsupported problem')
         try:bind_reference(check,source)
         except ValueError:failure.append('missing review reasoning/source evidence')
