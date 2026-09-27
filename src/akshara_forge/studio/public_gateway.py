@@ -18,9 +18,9 @@ def permitted(method, path):
     return method == 'GET' and (path in ('/', '/api/studio', '/api/bridge-sample', '/renderer.js', '/viewer.js') or bool(ASSETS.fullmatch(path)) or bool(JOBS.fullmatch(path)))
 
 
-def trusted_request(host, origin, public_origin, method):
+def trusted_request(host, origin, public_origin, method, upstream_host=None):
     parsed = urlsplit(public_origin)
-    return (parsed.scheme == 'https' and bool(parsed.netloc) and host == parsed.netloc
+    return (parsed.scheme == 'https' and bool(parsed.netloc) and host in (parsed.netloc, upstream_host) and host is not None
             and (origin == public_origin if method == 'POST' else origin in (None, public_origin)))
 
 
@@ -28,6 +28,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--session', type=Path, required=True)
     p.add_argument('--port', type=int, default=8789)
+    p.add_argument('--bind', default='127.0.0.1')
     a = p.parse_args()
 
     class Handler(BaseHTTPRequestHandler):
@@ -48,7 +49,7 @@ def main():
                 public_origin = json.loads(a.session.read_text())['origin']
             except (OSError, ValueError, KeyError):
                 return self.respond(503, b'{"error":"Demo session is starting"}')
-            if not trusted_request(self.headers.get('Host'), self.headers.get('Origin'), public_origin, self.command):
+            if not trusted_request(self.headers.get('Host'), self.headers.get('Origin'), public_origin, self.command, f'{a.bind}:{a.port}'):
                 return self.respond(403, b'{"error":"Invalid origin"}')
             if not permitted(self.command, self.path):
                 return self.respond(403, b'{"error":"Operator-only endpoint"}')
@@ -80,7 +81,7 @@ def main():
         do_GET = handle_request
         do_POST = handle_request
 
-    ThreadingHTTPServer(('127.0.0.1', a.port), Handler).serve_forever()
+    ThreadingHTTPServer((a.bind, a.port), Handler).serve_forever()
 
 
 if __name__ == '__main__':

@@ -16,3 +16,9 @@ def test_only_the_exact_session_origin_can_write():
     assert not trusted_request('demo.netbird.example.org', None, origin, 'POST')
     assert not trusted_request('demo.netbird.example.org', 'https://attacker.example.org', origin, 'POST')
     assert not trusted_request('other.netbird.example.org', None, origin, 'GET')
+
+
+def test_netbird_rewritten_host_still_requires_exact_public_origin():
+    origin = 'https://demo.netbird.example.org'
+    assert trusted_request('100.81.229.176:8789', origin, origin, 'POST', '100.81.229.176:8789')
+    assert not trusted_request('100.81.229.176:8789', 'https://attacker.example.org', origin, 'POST', '100.81.229.176:8789')

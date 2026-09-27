@@ -1,6 +1,6 @@
 [Unit]
 Description=AksharaForge restricted judge frontend
-After=aksharaforge.service
+After=aksharaforge.service netbird.service
 BindsTo=aksharaforge.service
 PartOf=aksharaforge.service
 
@@ -8,8 +8,9 @@ PartOf=aksharaforge.service
 User=aksharaforge
 Group=aksharaforge
 WorkingDirectory=/opt/aksharaforge
+EnvironmentFile=/etc/aksharaforge-netbird-gateway.env
 Environment=PYTHONPATH=/opt/aksharaforge/src
-ExecStart=/opt/aksharaforge/.venv/bin/python -m akshara_forge.studio.public_gateway --session /run/aksharaforge-demo/session.json
+ExecStart=/opt/aksharaforge/.venv/bin/python -m akshara_forge.studio.public_gateway --session /run/aksharaforge-demo/session.json --bind ${NETBIRD_BIND_IP}
 Restart=on-failure
 NoNewPrivileges=true
 ProtectSystem=strict
