@@ -56,3 +56,20 @@ def test_policy_gradient_direction():
         loss=policy_objective(logp,logp.detach().clone(),advantage,16)
         loss.backward()
         assert torch.all(torch.sign(logp.grad)==sign)
+
+
+def test_new_bridge_cases_progress_from_one_piece_to_correction(tmp_path):
+    old=tmp_path/'old';old.mkdir()
+    for split in ('train','heldout'):(old/f'{split}.json').write_text('[]')
+    dest=tmp_path/'new';generate(dest,old)
+    for split,count in [('train',20),('heldout',5)]:
+        rows=json.loads((dest/f'{split}.json').read_text())
+        for level in range(1,5):
+            group=[r for r in rows if r['curriculum']['level']==level]
+            assert len(group)==count and all(len(r['missing'])==level for r in group)
+            assert all(bool(r['editable_initial'])==(level==4) for r in group)
+            row=group[0];moves=[]
+            if row['editable_initial']:moves.append({'tool':'remove','id':'repair_seed'})
+            moves += [{'tool':'place','brick':dict(b,id='new_'+b['id'])} for b in row['missing']]
+            history=[json.dumps({'actions':moves[i:i+4]}) for i in range(0,len(moves),4)]
+            assert replay(row,history,tmp_path/'traces',sandbox=False)['observation']['success']

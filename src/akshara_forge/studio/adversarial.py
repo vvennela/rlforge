@@ -27,6 +27,9 @@ def review(rows, source, folder, call_model):
     request={'source_passages':passages(source), 'problems':[
         {'id':r['id'], 'prompt':r['prompt']} for r in rows],
         'response_contract':'Return problems as a flat array of review objects, one per supplied ID. Never wrap the array in another array.'}
+    if any('curriculum' in r for r in rows):
+        request['difficulty_contracts']={r['id']:r['curriculum'] for r in rows if 'curriculum' in r}
+        request['difficulty_review']='For each item also return difficulty_appropriate (boolean) and difficulty_reason. Check that the actual question obeys its stage requirements, including required scaffolding, number of concepts and input complexity. Reject an advanced task labeled foundation.'
     for attempt in range(3):
         destination=folder/'blind-review' if attempt==0 else folder/'blind-review'/f'schema-retry-{attempt}'
         packet=call_model(json.dumps(request),destination,system=REVIEW_SYSTEM)
@@ -46,6 +49,7 @@ def review(rows, source, folder, call_model):
     for row in rows:
         check = by_id[row['id']]
         failure = []
+        if 'curriculum' in row and (check.get('difficulty_appropriate') is not True or not check.get('difficulty_reason')):failure.append('task does not satisfy its difficulty contract')
         if check.get('unambiguous') is not True:failure.append('ambiguous or unsupported problem')
         try:bind_reference(check,source)
         except ValueError:failure.append('missing review reasoning/source evidence')

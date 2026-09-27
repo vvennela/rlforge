@@ -127,3 +127,14 @@ def test_malformed_reviewer_retries_without_author_answers(tmp_path):
     assert all(c['problems']==[{'id':'q1','prompt':'Compute 2+2'}] for c in calls)
     assert (tmp_path/'blind-review/schema-error.json').exists()
     assert (tmp_path/'blind-review/schema-retry-1/schema-error.json').exists()
+
+
+def test_advanced_task_cannot_pass_foundation_label(tmp_path):
+    r=row();r['curriculum']={'level':1,'requirements':'One operation with scaffold'}
+    def provider(prompt,folder,**kw):
+        request=json.loads(prompt);assert request['difficulty_contracts']['q1']['level']==1
+        packet=reviewer()(prompt,folder,**kw)
+        packet['problems'][0].update(difficulty_appropriate=False,difficulty_reason='No required scaffold')
+        return packet
+    with pytest.raises(ValueError,match='rejected'):review([r],'Addition',tmp_path,provider)
+    assert 'difficulty contract' in (tmp_path/'audit.json').read_text()

@@ -20,9 +20,9 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
         assert json_prefix is True
         if system!=g.SYSTEM:
             request=json.loads(prompt)
-            return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}
+            return {'problems':[{'id':r['id'],'unambiguous':True,'difficulty_appropriate':True,'difficulty_reason':'One addition on explicit inputs.','reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}
         rows=[]
-        for _ in range(10):
+        for _ in range(int(json.loads(prompt)['request'].split()[1])):
             counter[0]+=1
             rows.append({'prompt':f'Compute {counter[0]} + 1','source_quote':'Addition','solution_outline':'Add one.','reference_answer':counter[0]+1,'verification':'numeric','tolerance':0})
         return {'title':'Addition','problems':rows}
@@ -33,8 +33,11 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
         if s['status'] in ('ready','failed'):break
         time.sleep(.01)
     assert s['status']=='ready',s
+    assert s['manifest']['curriculum']['version']=='easy-to-hard-v1'
     p=tmp_path/s['id']/'environment'
     rows=json.loads((p/'private/problems.json').read_text());assert sum(r['split']=='heldout' for r in rows)==4
+    assert [r['curriculum']['level'] for r in rows]==[1]*5+[2]*5+[3]*5+[4]*5
+    assert [r['curriculum']['level'] for r in rows if r['split']=='heldout']==[1,2,3,4]
     public=json.loads((p/'tasks.json').read_text());assert 'reference_answer' not in public[0]
     assert len(json.loads((p/'learner/tasks.json').read_text()))==16
     assert len(json.loads((p/'evaluation/tasks.json').read_text()))==4
@@ -130,6 +133,7 @@ def test_source_alignment_preserves_symbols_and_requires_unique_span():
 
 
 def test_rejected_upload_batch_is_preserved_and_repaired_before_release(tmp_path,monkeypatch):
+    monkeypatch.setattr(g,'curriculum_manifest',lambda count:None)  # Frozen pre-curriculum job compatibility.
     monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
     monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
     calls=[];drafts=[0]
@@ -206,6 +210,7 @@ def test_malformed_provider_json_retries_identical_blind_prompt_and_retains_rece
 
 
 def test_upload_keeps_validated_items_and_only_replaces_rejected_ones(tmp_path,monkeypatch):
+    monkeypatch.setattr(g,'curriculum_manifest',lambda count:None)  # Frozen pre-curriculum job compatibility.
     monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
     monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
     counts=[];drafts=[0]
@@ -286,6 +291,7 @@ def test_external_math_snapshot_preserves_partial_denominator_and_runtime(tmp_pa
 
 @pytest.mark.parametrize('initial_good',[9,10])
 def test_failed_generation_continues_verified_progress(tmp_path,monkeypatch,initial_good):
+    monkeypatch.setattr(g,'curriculum_manifest',lambda count:None)  # Frozen pre-curriculum job compatibility.
     monkeypatch.setattr(g,'config',lambda:{'configured':True,'model':'test'})
     phase=['fail'];counter=[0];requests=[]
     def provider(prompt,folder,*,system=g.SYSTEM,**kwargs):

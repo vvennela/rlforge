@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .environment import BrickEnvironment, cells, evaluate, fingerprint
 from .pilot import make_case, write
 from .worker import apply, PALETTE
+from ..curriculum import slot, manifest as curriculum_manifest
 
 TURNS=8
 SYSTEM='''You are repairing a LEGO-style bridge in an interactive sandbox. You have up to 8 turns. After each turn you receive the actual structure and measured feedback. Build the entire requested upright; one brick may not be enough. Correct your own mistakes by moving or removing editable pieces. The rest of the bridge is locked.
@@ -26,23 +27,25 @@ def generate(path,old_dataset):
     excluded={r['geometry_signature'] for s in ['train','heldout'] for r in json.loads((Path(old_dataset)/f'{s}.json').read_text())}
     rng=random.Random(20260928);rows=[];seen=set()
     while len(rows)<100:
-        L=rng.choice(range(24,47,2)); spec=(L,rng.randint(5,10),L-rng.randint(7,11),rng.randint(16,24),rng.randint(17,26),rng.choice([0,5]),rng.randrange(2),rng.choice([2,3,4]))
+        level=len(rows)//25+1
+        L=rng.choice(range(24,47,2)); spec=(L,rng.randint(5,10),L-rng.randint(7,11),rng.randint(16,24),rng.randint(17,26),rng.choice([0,5]),rng.randrange(2),level)
         sig=fingerprint(spec)
         if sig in excluded or sig in seen: continue
-        i=len(rows);row=make_case(i,spec,'train' if i<80 else 'heldout')
+        i=len(rows);assigned=slot(i,100);split=assigned.pop('split');row=make_case(i,spec,split)
+        row['curriculum']=assigned;row['difficulty']=level
         gap=set().union(*(cells(b) for b in row['missing']))
-        if len(gap)<4: continue
+        if len(row['missing'])!=level: continue
         target={'x':min(c[0] for c in gap),'y':min(c[1] for c in gap),'bottom':min(c[2] for c in gap),'top':max(c[2] for c in gap)+1,'cross_section':[1,1]}
         key=json.dumps(target,sort_keys=True)
         if key in seen: continue
         row['id']='interactive-'+row['id'];row['task']['id']=row['id']; row.pop('prompt')
         row['target']=target; row['editable_initial']=[]
-        row['mode']='correct_misplaced' if i%4==0 else 'build_missing'
+        row['mode']='correct_misplaced' if level==4 else 'build_missing'
         if row['mode']=='correct_misplaced':
             row['editable_initial']=[{'id':'repair_seed','part':'brick_1x1','x':target['x']+1,'y':target['y'],'z':target['bottom'],'rotation':0}]
         rows.append(row);seen.update([sig,key])
     for split in ['train','heldout']:write(path/f'{split}.json',[r for r in rows if r['split']==split])
-    write(path/'manifest.json',{'seed':20260928,'train':80,'heldout':20,'turns':TURNS,'kind':'interactive_single_upright_repair',
+    write(path/'manifest.json',{'seed':20260928,'train':80,'heldout':20,'turns':TURNS,'kind':'interactive_single_upright_repair','curriculum':curriculum_manifest(100),
          'scope':'Synthetic bridge repairs; includes misplaced editable starter bricks. Not whole-bridge generation.',
          'sha256':{s:hashlib.sha256((path/f'{s}.json').read_bytes()).hexdigest() for s in ['train','heldout']}})
 

@@ -67,6 +67,9 @@ def evaluation(model,tokenizer,rows,dest,phase):
         for e in episodes:
             rec=public_record(e);append(dest/'episodes.jsonl',rec);records.append(rec)
         summary={'completed':len(records),'expected':len(rows),'complete':len(records)==len(rows),'first_attempt_successes':sum(e['first_result']['success'] for e in records),'repair_successes':sum(e['result']['success'] for e in records),'first_mean_test_score':sum(e['first_result']['test_score'] for e in records)/len(records),'repair_mean_test_score':sum(e['result']['test_score'] for e in records)/len(records),'repair_mean_field_score':sum(e['result']['field_score'] for e in records)/len(records)}
+        if any('curriculum' in row for row in rows):
+            levels={row['id']:row['curriculum']['level'] for row in rows}
+            summary['by_level']={str(level):{'completed':len(group),'first_attempt_successes':sum(e['first_result']['success'] for e in group),'repair_successes':sum(e['result']['success'] for e in group),'repair_mean_field_score':sum(e['result']['field_score'] for e in group)/len(group)} for level in sorted(set(levels.values())) if (group:=[e for e in records if levels[e['id']]==level])}
         write(dest/'summary.json',summary);print(json.dumps({'event':phase,**summary}),flush=True)
     return summary
 
@@ -82,9 +85,12 @@ def run(a):
         if digest(a.dataset/f'{s}.json')!=d:raise ValueError('Frozen dataset changed')
     os.environ['AKSHARA_FEEDBACK_MANIFEST']=digest(a.dataset/'manifest.json')
     training=json.loads((a.dataset/'train.json').read_text());heldout=json.loads((a.dataset/'heldout.json').read_text())
-    # Three-output configurations first, then four-output configurations. Training-only ordering.
-    training=sorted(training,key=lambda r:(len(r['configuration']['fields']),r['id']))
-    protocol={'model':str(a.model),'dataset':manifest,'max_updates':a.steps,'group_size':2,'turns':3,'max_tokens':1536,'seed':20260930,'precision':'bfloat16','attention':'sdpa','learning_rate':1e-5,'kl':.01,'algorithm':'Paired-trajectory REINFORCE, leave-one-out final private training reward; generated assistant tokens only','reward':'0.5 private-test fraction + 0.5 private-field fraction; development examples are feedback only','selection':'Final completed update before fixed training deadline; never based on held-out scores','training_deadline':a.training_deadline,'hard_deadline':a.deadline,'evaluation':'20 fresh configurations; greedy first attempt and up-to-three-attempt repair; stop only on development success; identical before/after budgets','feedback':'Only development examples, expected outputs, actual outputs and errors enter model context. Private scoring happens after trajectory ends.','training_order':[r['id'] for r in training],'source_sha256':{n:digest(Path(__file__).with_name(n)) for n in ['train_feedback.py','feedback.py','service.py','worker.py','tasks.py']}}
+    if manifest.get('curriculum'):
+        from ..curriculum import schedule
+        training=schedule(training,a.steps)
+    else:training=sorted(training,key=lambda r:(len(r['configuration']['fields']),r['id']))
+    protocol={'model':str(a.model),'dataset':manifest,'max_updates':a.steps,'group_size':2,'turns':3,'max_tokens':1536,'seed':20260930,'precision':'bfloat16','attention':'sdpa','learning_rate':1e-5,'kl':.01,'algorithm':'Paired-trajectory REINFORCE, leave-one-out final private training reward; generated assistant tokens only','reward':'0.5 private-test fraction + 0.5 private-field fraction; development examples are feedback only','selection':'Final completed update before fixed training deadline; never based on held-out scores','training_deadline':a.training_deadline,'hard_deadline':a.deadline,'evaluation':'20 fresh configurations; greedy first attempt and up-to-three-attempt repair; stop only on development success; identical before/after budgets','feedback':'Only development examples, expected outputs, actual outputs and errors enter model context. Private scoring happens after trajectory ends.','training_order':[r['id'] for r in training],'source_sha256':{n:digest(Path(__file__).with_name(n)) for n in ['train_feedback.py','feedback.py','service.py','worker.py','tasks.py','curriculum.py']}}
+    if manifest.get('curriculum'):protocol['curriculum_policy_sha256']=digest(Path(__file__).parents[1]/'curriculum.py')
     write(a.output/'protocol.json',protocol);set_seed(20260930)
     tokenizer=AutoTokenizer.from_pretrained(a.model);tokenizer.pad_token=tokenizer.eos_token;tokenizer.padding_side='left'
     base=AutoModelForCausalLM.from_pretrained(a.model,torch_dtype=torch.bfloat16,attn_implementation='sdpa').to('cuda')
@@ -132,7 +138,7 @@ def run(a):
             if not torch.isfinite(torch.tensor(norm)):raise RuntimeError('Nonfinite gradient')
             optimizer.step();step=proposed
             for e in episodes:append(a.output/'training-traces.jsonl',{'step':step,**public_record(e)})
-            event={'step':step,'task':row['id'],'rewards':returns,'contrast_batches':contrast,'loss':loss_value,'gradient_norm':norm,'nonzero_gradient_elements':nonzero,'seconds':time.time()-begin,**delta()}
+            event={'step':step,'task':row['id'],'curriculum':row.get('curriculum'),'rewards':returns,'contrast_batches':contrast,'loss':loss_value,'gradient_norm':norm,'nonzero_gradient_elements':nonzero,'seconds':time.time()-begin,**delta()}
             append(a.output/'optimizer-events.jsonl',event);save('checkpoint-'+str(step));print(json.dumps({'event':'optimizer',**event}),flush=True)
         save('adapter');write(a.output/'training-completion.json',{'updates':step,'contrast_batches':contrast,**delta()})
         after=evaluation(model,tokenizer,heldout,a.output/'after','after')
