@@ -47,6 +47,8 @@ def grade(row,completion,training_reward='tests'):
         except (ValueError,TypeError,OverflowError):ok=False
         checks.append(ok)
         expected=test['expected'];value=got.get('value') if isinstance(got,dict) and set(got)=={'value'} else None
+        if not isinstance(expected,dict):
+            field_checks.append({'value':ok});continue
         schema_ok=isinstance(value,dict) and set(value)==set(expected)
         fields={}
         for key,want in expected.items():
