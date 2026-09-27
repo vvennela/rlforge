@@ -36,7 +36,14 @@ class Studio:
             parts=path.strip('/').split('/');id=parts[2]
             try:
                 status=self.jobs.read(id)
-                if len(parts)==4 and parts[3]=='download':
+                if len(parts)==4 and parts[3]=='evidence':
+                    if not status.get('ocr'):h.send({'error':'Source artifacts are being prepared'},409)
+                    else:h.send((self.jobs.root/id/'source-evidence.zip').read_bytes(),ctype='application/zip')
+                elif len(parts)==5 and parts[3]=='page':
+                    page=int(parts[4])
+                    if not 1<=page<=status.get('ocr',{}).get('pages',0):raise ValueError('Unknown page')
+                    h.send((self.jobs.root/id/f'evidence/canonical/pages/page-{page:04d}.png').read_bytes(),ctype='image/png')
+                elif len(parts)==4 and parts[3]=='download':
                     if status['status']!='ready':h.send({'error':'Environment is not ready'},409)
                     else:h.send((self.jobs.root/id/'environment.zip').read_bytes(),ctype='application/zip')
                 else:h.send(status)

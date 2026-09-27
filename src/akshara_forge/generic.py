@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import pymupdf as fitz
 from .canonical import _page
@@ -15,7 +15,7 @@ from .akshara import import_frozen
 from .io import digest_file, write_json
 
 
-def canonicalize(pdf: Path, out: Path, *, paper_id: str | None=None, workers: int=3) -> dict:
+def canonicalize(pdf: Path, out: Path, *, paper_id: str | None=None, workers: int=3, progress=None) -> dict:
     pdf=pdf.resolve();paper_id=paper_id or pdf.stem
     if out.exists():
         raise ValueError('Use a new immutable output directory for new PDF acquisition')
@@ -25,8 +25,13 @@ def canonicalize(pdf: Path, out: Path, *, paper_id: str | None=None, workers: in
     for folder in ['raw','pages','strips','ocr','provenance']:
         (acquisition/folder).mkdir(parents=True,exist_ok=True)
     with fitz.open(pdf) as doc:count=len(doc)
+    pages=[]
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        pages=list(pool.map(lambda i:_page(str(pdf),i,str(acquisition),200,1000,100,False),range(count)))
+        jobs=[pool.submit(_page,str(pdf),i,str(acquisition),200,1000,100,False) for i in range(count)]
+        for job in as_completed(jobs):
+            pages.append(job.result())
+            if progress:progress(len(pages),count)
+    pages.sort(key=lambda p:p['page'])
     engine=subprocess.run(['tesseract','--version'],capture_output=True,text=True).stdout.splitlines()[0] if shutil.which('tesseract') else None
     raw={'model':'local-native-text-with-tesseract-fallback','engine_version':engine,
          'pages':[{'index':p['page']-1,'markdown':p['raw_text'],'header':None,'footer':None,

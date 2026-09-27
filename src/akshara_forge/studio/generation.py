@@ -107,13 +107,10 @@ class GenerationJobs:
         return self.read(id)
     def run(self,folder,name,count):
         try:
-            raw=folder/name;pages=[]
+            raw=folder/name;pages=[];source_artifacts=[]
             if raw.suffix.lower()=='.pdf':
-                import pymupdf
-                with pymupdf.open(raw) as doc:
-                    if len(doc)>200:raise ValueError('Upload a section of up to 200 pages.')
-                    for i,page in enumerate(doc):pages.append({'page':i+1,'text':page.get_text()})
-                if any(len(p['text'].strip())<20 for p in pages):raise ValueError('This PDF includes image-only pages. Import its Akshara OCR text or upload the extracted specification.')
+                from .ocr import prepare
+                pages,source_artifacts=prepare(raw,folder,lambda **fields:self.status(folder,**fields))
             else:pages=[{'page':1,'text':raw.read_text(encoding='utf-8')}]
             source='\n\n'.join(p['text'] for p in pages)
             (folder/'raw-pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2))
@@ -121,10 +118,10 @@ class GenerationJobs:
             if not source.strip() or len(source)>120000:raise ValueError('Upload a specification containing 1–120,000 text characters.')
             if not config()['configured']:
                 self.status(folder,status='awaiting_connection',message='Document extracted. Connect the server API key to generate its environment.',pages=len(pages));return
-            self.status(folder,status='generating',pages=len(pages))
+            self.status(folder,status='generating',pages=len(pages),message='Generating source-linked practice problems.')
             rows=[];title=name
             for offset in range(0,count,10):
-                packet=call_model(json.dumps({'request':f'Generate 10 distinct problems for batch {offset//10+1}.','source':source,'previous_prompts':[r['prompt'] for r in rows]}),folder/f'calls/{offset//10:02}')
+                packet=call_model(json.dumps({'request':f'Generate 10 distinct problems for batch {offset//10+1}.','source':source,'source_artifacts':source_artifacts,'previous_prompts':[r['prompt'] for r in rows]}),folder/f'calls/{offset//10:02}')
                 batch=validate(packet,source,10);title=packet.get('title',name)
                 for r in batch:
                     r['id']=f'problem-{len(rows)+1:03}';r['split']='train' if len(rows)<count*4//5 else 'heldout';rows.append(r)
@@ -136,12 +133,15 @@ class GenerationJobs:
             (bundle/'environment.py').write_text(RUNTIME)
             (bundle/'source.txt').write_text(source)
             manifest={'title':title,'model':config()['model'],'source_sha256':hashlib.sha256(raw.read_bytes()).hexdigest(),'problems':count,'train':count*4//5,'heldout':count-count*4//5,'validation':'schema and source quotations checked; reference answers await independent verification','reward':'numeric or exact JSON comparison','entrypoint':'python environment.py'}
+            ocr=self.read(folder.name).get('ocr')
+            if ocr:manifest['source_evidence']=ocr
             (bundle/'manifest.json').write_text(json.dumps(manifest,indent=2))
             (bundle/'README.md').write_text('# '+title+'\n\nRun `python environment.py` and send JSON lines: {"op":"reset","id":"problem-001"}, then {"op":"step","answer":42}.\n\nKeep private/problems.json on the verifier host; never mount it in the learner sandbox. Validate generated reference answers before training. The runtime returns a scalar reward and terminates each one-answer episode.\n')
             with zipfile.ZipFile(folder/'environment.zip','w',zipfile.ZIP_DEFLATED) as z:
+                if (folder/'source-evidence.zip').exists():z.write(folder/'source-evidence.zip','source-evidence.zip',compress_type=zipfile.ZIP_STORED)
                 for p in bundle.rglob('*'):
                     if p.is_file():z.write(p,str(p.relative_to(bundle)))
-            self.status(folder,status='ready',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split')} for r in rows[:3]])
+            self.status(folder,status='ready',message='Environment packaged with source evidence and executable reward checks.',manifest=manifest,download=f'/api/generation/{folder.name}/download',preview=[{k:r[k] for k in ('id','prompt','source_quote','split')} for r in rows[:3]])
         except Exception as exc:
             message=f'Provider request failed (HTTP {exc.response.status_code}).' if isinstance(exc,httpx.HTTPStatusError) else str(exc)[:250]
             self.status(folder,status='failed',message=message)
