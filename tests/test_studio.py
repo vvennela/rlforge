@@ -182,3 +182,21 @@ def test_response_shape_does_not_reveal_null_or_empty_answers():
     assert answer_schema(None)=={}
     assert answer_schema({})=={'type':'object'}
     assert answer_schema([])=={'type':'array','items':{}}
+
+
+def test_malformed_provider_json_retries_identical_blind_prompt_and_retains_receipts(tmp_path,monkeypatch):
+    monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
+    monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','vultr')
+    monkeypatch.setenv('AKSHARA_GENERATOR_MODEL','chosen')
+    monkeypatch.setenv('VULTR_INFERENCE_API_KEY','test')
+    requests=[]
+    def transport(req):
+        if req.method=='GET':return httpx.Response(200,json={'data':[{'id':'chosen'}]})
+        requests.append(json.loads(req.content))
+        content='{"answer":"117,"reason":"broken"}]}' if len(requests)==1 else '{"answer":117}]}'
+        return httpx.Response(200,json={'model':'chosen','choices':[{'finish_reason':'stop','message':{'content':content}}]})
+    with httpx.Client(transport=httpx.MockTransport(transport)) as c:
+        assert g.call_model('Only the question',tmp_path,c,system='Blind reviewer',json_prefix=True)=={'problems':[{'answer':117}]}
+    assert requests[0]==requests[1]
+    assert (tmp_path/'parse-error.json').exists()
+    assert (tmp_path/'response.json').exists() and (tmp_path/'json-retry/response.json').exists()

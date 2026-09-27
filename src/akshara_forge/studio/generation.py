@@ -20,7 +20,7 @@ def config():
     return {'provider':s['provider'],'model':s['model'],'configured':bool(s['key'] and s['model'])}
 
 
-def call_model(prompt, folder, client=None, *, system=SYSTEM, json_prefix=False):
+def call_model(prompt, folder, client=None, *, system=SYSTEM, json_prefix=False, json_retries=2):
     c=config()
     if not c['configured']:raise ValueError('Connect the generation API key on the server to start generation.')
     prefix=''
@@ -54,7 +54,15 @@ def call_model(prompt, folder, client=None, *, system=SYSTEM, json_prefix=False)
             if raw.get('model') not in (c['model'],selected.get('hugging_face_id')):raise ValueError('Unexpected returned model identity.')
             if raw['choices'][0].get('finish_reason')!='stop':raise ValueError('Generation reached its output limit.')
             content=raw['choices'][0]['message']['content']
-        return decode_packet(prefix+content)
+        try:
+            return decode_packet(prefix+content)
+        except ValueError as exc:
+            (folder/'parse-error.json').write_text(json.dumps({'error':str(exc),'retries_remaining':json_retries}))
+            if not json_retries:raise
+            # Repeat the identical blind request; never repair answer values or expose
+            # author answers to the reviewer. Each provider receipt stays immutable.
+            return call_model(prompt,folder/'json-retry',client,system=system,
+                              json_prefix=json_prefix,json_retries=json_retries-1)
     finally:
         if owned:client.close()
 
