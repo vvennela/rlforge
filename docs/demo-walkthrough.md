@@ -8,7 +8,8 @@ Upload a short source document. Show OCR/source artifacts and generation progres
 
 **0:25–1:05 — The environment.** Open Engineering. Rotate the three bridge views:
 starting structure, base Qwen, and trained Qwen. Explain the eight-turn tool budget
-and geometry/connectivity rewards. Use the displayed completed holdout scores;
+and geometry/connectivity rewards. Show 3/20 → 7/20 successful repairs (+20pp)
+and 36.7% → 71.1% mean target overlap after fifty batches. Use the displayed completed holdout scores;
 partial results remain labeled as such. The gallery opens on the fixed first held-out case. Use its selector to inspect
 all twenty cases in dataset order, including unchanged repairs and failures.
 
