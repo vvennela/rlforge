@@ -18,3 +18,5 @@ checkpoints/
 work/
 dist/
 *.html
+
+!src/akshara_forge/engineering/demo.html

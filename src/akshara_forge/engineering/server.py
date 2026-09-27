@@ -1,0 +1,61 @@
+"""Loopback-only competition prototype; no cloud deployment implied."""
+import argparse,json,threading,time
+from pathlib import Path
+from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
+from .environment import BrickEnvironment,reference
+from .agent import repair
+
+def main():
+ p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8787);p.add_argument('--runs',type=Path,required=True);p.add_argument('--drawing',type=Path,required=True);a=p.parse_args()
+ if not a.drawing.is_file():p.error('Drawing file missing')
+ lock=threading.RLock();env=BrickEnvironment(a.runs/'episodes');state={'mode':'empty workspace','busy':False,'error':None}
+ class Handler(BaseHTTPRequestHandler):
+  def log_message(self,*args):pass
+  def send(self,data,status=200,ctype='application/json'):
+   raw=data if isinstance(data,bytes) else json.dumps(data).encode();self.send_response(status);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(raw)
+  def allowed(self):return self.headers.get('Host') in [f'127.0.0.1:{a.port}',f'localhost:{a.port}']
+  def do_GET(self):
+   if not self.allowed():return self.send({'error':'Invalid host'},403)
+   if self.path=='/':return self.send(Path(__file__).with_name('demo.html').read_bytes(),ctype='text/html; charset=utf-8')
+   if self.path=='/drawing':return self.send(a.drawing.read_bytes(),ctype='image/jpeg')
+   if self.path=='/api/state':
+    with lock:return self.send({**env.observe(),**state})
+   self.send({'error':'Not found'},404)
+  def do_POST(self):
+   nonlocal env
+   if not self.allowed() or self.headers.get('Origin') not in [None,f'http://127.0.0.1:{a.port}',f'http://localhost:{a.port}']:return self.send({'error':'Invalid origin'},403)
+   if self.headers.get('Content-Type')!='application/json':return self.send({'error':'JSON required'},415)
+   try:
+    size=int(self.headers.get('Content-Length','0'))
+    if not 0<size<=100000:raise ValueError('Invalid request size')
+    req=json.loads(self.rfile.read(size))
+    with lock:
+     if state['busy']:return self.send({'error':'Agent running; wait for it to finish'},409)
+     if self.path=='/api/reset':
+      mode=req.get('mode','empty')
+      if mode not in ['empty','damaged','reference']:raise ValueError('Unknown fixture')
+      env.close();env=BrickEnvironment(a.runs/'episodes');state.update(mode=mode+' — scripted fixture' if mode!='empty' else 'empty workspace',error=None)
+      if mode!='empty':
+       bricks=reference()
+       if mode=='damaged':
+        for b in bricks:
+         if b['id'] in ['b2','b3']:b['x']-=4
+       env.step([{'tool':'place','brick':b} for b in bricks],actor='scripted_fixture')
+     elif self.path=='/api/step':env.step(req['actions'],actor='manual_ui');state['mode']='manual tool actions'
+     elif self.path=='/api/agent':
+      if env.done:raise ValueError('Load the damaged fixture or reset before running the agent')
+      state.update(busy=True,mode='Qwen 2.5 7B · inference-time repair',error=None)
+      def run():
+       try:repair(env,a.runs/'agents'/env.episode)
+       except Exception as exc:state['error']=str(exc)[:300]
+       finally:state['busy']=False
+      threading.Thread(target=run,daemon=True).start()
+     else:return self.send({'error':'Not found'},404)
+     self.send({**env.observe(),**state})
+   except Exception as exc:self.send({'error':str(exc)[:300]},400)
+ server=ThreadingHTTPServer(('127.0.0.1',a.port),Handler)
+ print(f'Engineering environment: http://127.0.0.1:{a.port}',flush=True)
+ try:server.serve_forever()
+ finally:server.server_close();env.close()
+
+if __name__=='__main__':main()

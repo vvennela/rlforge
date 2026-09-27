@@ -76,3 +76,7 @@ For a later comparison, run the same command with `--adapter /path/to/adapter` a
 Keep MATH-500 evaluation-only. Do not use its questions or scores to generate training tasks or repeatedly select checkpoints. The project target is more than 10 **percentage points** of absolute improvement, which requires at least 51 net additional correct answers out of 500. This is a project-specific protocol, not a claim of matching published leaderboard settings.
 
 This repository contains pipeline code and tests. Papers, generated datasets, credentials, model weights, private run traces and cloud connection settings are excluded.
+
+## Engineering brick environment (prototype)
+
+The separate [engineering environment](docs/engineering-environment.md) exposes sandboxed brick actions, source-linked dimensions, vector/scalar rewards and a local visual demo. It currently implements one curated bridge abstraction and records real Ollama/Qwen repair attempts. It does not yet automatically compile drawings or perform engineering RL weight updates.
