@@ -4,7 +4,9 @@
 
 **0:00–0:25 — The product.** Open Upload. “RLForge turns technical documents into
 learning environments: tasks, sandbox tools, feedback, and measurable evaluation.”
-Upload a short source document. Show OCR/source artifacts and generation progress.
+Choose the 20-problem practice set and upload a short source document for the
+live walkthrough. Show OCR/source artifacts and generation progress. The 100-problem
+option remains available; the trained case studies use their frozen 80/20 datasets.
 
 **0:25–1:05 — The environment.** Open Engineering. Rotate the three bridge views:
 starting structure, base Qwen, and trained Qwen. Explain the eight-turn tool budget
