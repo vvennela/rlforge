@@ -31,23 +31,35 @@ def execute(code,inputs,timeout=30):
         if proc.poll() is None:proc.kill()
         proc.wait(timeout=5)
 
-def grade(row,completion):
+def grade(row,completion,training_reward='tests'):
+    if training_reward not in ('tests','components'):raise ValueError('Unknown reward mode')
     try:out=execute(code_from(completion),[t['input'] for t in row['tests']])
     except (ValueError,SyntaxError) as exc:out={'error':type(exc).__name__}
     if not isinstance(out,dict):out={'error':'InvalidEnvelope'}
     results=out.get('results',[])
     if not isinstance(results,list) or len(results)!=len(row['tests']):
         out={'error':out.get('error','InvalidResultCount')};results=[]
-    checks=[]
+    checks=[];field_checks=[]
     for i,test in enumerate(row['tests']):
         got=results[i] if i<len(results) else {}
         try:
             ok=isinstance(got,dict) and set(got)=={'value'} and json.dumps(got['value'],sort_keys=True,allow_nan=False)==json.dumps(test['expected'],sort_keys=True,allow_nan=False)
         except (ValueError,TypeError,OverflowError):ok=False
         checks.append(ok)
-    return {'reward':sum(checks)/len(checks),'success':all(checks),'passed':sum(checks),'total':len(checks),'checks':checks,'error':out.get('error'),'sandbox':'gVisor / no network / read-only / unprivileged','wall_timeout_seconds':30}
+        expected=test['expected'];value=got.get('value') if isinstance(got,dict) and set(got)=={'value'} else None
+        schema_ok=isinstance(value,dict) and set(value)==set(expected)
+        fields={}
+        for key,want in expected.items():
+            try:fields[key]=schema_ok and json.dumps(value[key],sort_keys=True,allow_nan=False)==json.dumps(want,sort_keys=True,allow_nan=False)
+            except (ValueError,TypeError,OverflowError):fields[key]=False
+        field_checks.append(fields)
+    field_total=sum(len(c) for c in field_checks)
+    field_score=sum(sum(c.values()) for c in field_checks)/field_total
+    test_score=sum(checks)/len(checks)
+    reward=test_score if training_reward=='tests' else .5*test_score+.5*field_score
+    return {'reward':reward,'reward_mode':training_reward,'field_score':field_score,'field_checks':field_checks,'test_score':test_score,'success':all(checks),'passed':sum(checks),'total':len(checks),'checks':checks,'error':out.get('error'),'sandbox':'gVisor / no network / read-only / unprivileged','wall_timeout_seconds':30}
 
-def serve(dataset,output,token_file,port):
+def serve(dataset,output,token_file,port,training_reward='tests'):
     token=token_file.read_text().strip();output.mkdir(parents=True,exist_ok=True)
     manifest=json.loads((dataset/'manifest.json').read_text())
     manifest_hash=hashlib.sha256((dataset/'manifest.json').read_bytes()).hexdigest()
@@ -65,7 +77,7 @@ def serve(dataset,output,token_file,port):
                 if phase not in ('train','before','after','preflight'):raise ValueError('Unknown phase')
                 if phase=='train' and row['split']!='train':raise ValueError('Heldout leakage blocked')
                 if phase in ('before','after') and row['split']!='heldout':raise ValueError('Wrong evaluation split')
-                with slots:result=grade(row,req['completion'])
+                with slots:result=grade(row,req['completion'],training_reward if phase=='train' else 'tests')
                 result['dataset_manifest_sha256']=manifest_hash
                 with lock:
                     with (output/'requests.jsonl').open('a') as f:f.write(json.dumps({'time':time.time(),**req,'result':result})+'\n')
@@ -75,4 +87,4 @@ def serve(dataset,output,token_file,port):
     ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--token-file',type=Path,required=True);p.add_argument('--port',type=int,default=8771);a=p.parse_args();serve(a.dataset,a.output,a.token_file,a.port)
+    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--token-file',type=Path,required=True);p.add_argument('--port',type=int,default=8771);p.add_argument('--training-reward',choices=['tests','components'],default='tests');a=p.parse_args();serve(a.dataset,a.output,a.token_file,a.port,a.training_reward)

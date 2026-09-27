@@ -38,3 +38,29 @@ def test_frozen_split_has_unique_specifications(tmp_path):
 
 def test_code_fence_extraction():
     assert code_from('```python\ndef solve(p): return None\n```')=='def solve(p): return None\n'
+
+
+def test_component_reward_preserves_exact_success_and_maximum(monkeypatch):
+    from akshara_forge.coding import service
+    row={'tests':[{'input':{},'expected':{'cost':3,'path':['A','B'],'bounds':[0,3]}}]}
+    value={'cost':3,'path':['A','B'],'bounds':[0,1,3]}
+    monkeypatch.setattr(service,'execute',lambda *args:{'results':[{'value':value}]})
+    strict=service.grade(row,'unused')
+    shaped=service.grade(row,'unused','components')
+    assert strict['reward']==0 and shaped['reward']==1/3
+    assert not strict['success'] and not shaped['success']
+    assert strict['checks']==shaped['checks']==[False]
+    value['bounds']=[0,3]
+    assert service.grade(row,'unused','components')['reward']==1
+    assert service.grade(row,'unused','components')['success']
+
+
+def test_component_reward_rejects_schema_spoofing_and_wrong_types(monkeypatch):
+    from akshara_forge.coding import service
+    row={'tests':[{'input':{},'expected':{'cost':1,'bounds':[0,1]}}]}
+    for value in [{'cost':1},{'cost':1,'bounds':[0,1],'reward':1}, {'cost':True,'bounds':[False,True]}, {'cost':float('nan'),'bounds':None}]:
+        monkeypatch.setattr(service,'execute',lambda *args:{'results':[{'value':value}]})
+        result=service.grade(row,'unused','components')
+        assert result['reward']==0 and not result['success']
+    monkeypatch.setattr(service,'execute',lambda *args:{'results':[{'value':{'cost':1,'bounds':[0,1]},'reward':1}]})
+    assert service.grade(row,'unused','components')['reward']==0

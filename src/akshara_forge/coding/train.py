@@ -15,6 +15,8 @@ def reward(row,text,phase):
             r.raise_for_status();result=r.json()
             if result.get('dataset_manifest_sha256')!=os.environ['AKSHARA_CODING_MANIFEST_SHA256']:raise ValueError('Reward server dataset mismatch')
             if result.get('wall_timeout_seconds')!=30:raise ValueError('Reward server execution budget mismatch')
+            expected_mode=os.environ['AKSHARA_CODING_TRAINING_REWARD'] if phase=='train' else 'tests'
+            if result.get('reward_mode')!=expected_mode:raise ValueError('Reward server shaping mode mismatch')
             return result
         except (httpx.TransportError,httpx.HTTPStatusError) as exc:
             if isinstance(exc,httpx.HTTPStatusError) and exc.response.status_code<500:raise
@@ -50,7 +52,7 @@ def evaluate(model,tokenizer,rows,dest,phase):
         batch=sample(model,tokenizer,rows[offset:offset+2],phase,False)
         for record in batch:
             record.pop('input_ids');record['generated_tokens']=len(record.pop('output_ids'));append(dest/'episodes.jsonl',record);records.append(record)
-        write(dest/'summary.json',{'completed':len(records),'expected':len(rows),'complete':len(records)==len(rows),'successes':sum(r['result']['success'] for r in records),'mean_reward':sum(r['result']['reward'] for r in records)/len(records)})
+        write(dest/'summary.json',{'completed':len(records),'expected':len(rows),'complete':len(records)==len(rows),'successes':sum(r['result']['success'] for r in records),'mean_reward':sum(r['result']['reward'] for r in records)/len(records),'mean_field_score':sum(r['result']['field_score'] for r in records)/len(records)})
         print(json.dumps({'event':phase,'completed':len(records),'successes':sum(r['result']['success'] for r in records)}),flush=True)
     return records
 
@@ -62,13 +64,14 @@ def run(args):
     from safetensors.torch import load_file
     if args.output.exists() and not args.resume:raise ValueError('Fresh output required')
     args.output.mkdir(parents=True,exist_ok=True)
+    os.environ['AKSHARA_CODING_TRAINING_REWARD']=args.training_reward
     manifest=json.loads((args.dataset/'manifest.json').read_text())
     os.environ['AKSHARA_CODING_MANIFEST_SHA256']=hashlib.sha256((args.dataset/'manifest.json').read_bytes()).hexdigest()
     for split,digest in manifest['sha256'].items():
         if hashlib.sha256((args.dataset/f'{split}.json').read_bytes()).hexdigest()!=digest:raise ValueError('Dataset changed')
     training=json.loads((args.dataset/'train.json').read_text());heldout=json.loads((args.dataset/'heldout.json').read_text())
     if {r['id'] for r in training}&{r['id'] for r in heldout}:raise ValueError('Split overlap')
-    protocol={'model':str(args.model),'manifest':manifest,'steps':args.steps,'group_size':4,'sandbox_wall_timeout_seconds':30,'max_tokens':1536,'seed':20260929,'temperature':.8,'top_p':.95,'top_k':0,'learning_rate':2e-5,'kl':.01,'lora_rank':8,'lora_alpha':16,'modules':['q_proj','v_proj'],'precision':'bfloat16','algorithm':'Group-relative REINFORCE with leave-one-out rewards and sampled KL penalty','reward':f"Fraction of {manifest['tests_per_task']} sandboxed tests passed",'evaluation':'20 frozen specifications; greedy, same 1536-token budget before and after','selection':'Final fixed-step adapter only; no holdout checkpoint selection','source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    protocol={'model':str(args.model),'manifest':manifest,'steps':args.steps,'group_size':4,'sandbox_wall_timeout_seconds':30,'max_tokens':1536,'seed':20260929,'temperature':.8,'top_p':.95,'top_k':0,'learning_rate':2e-5,'kl':.01,'lora_rank':8,'lora_alpha':16,'modules':['q_proj','v_proj'],'precision':'bfloat16','algorithm':'Group-relative REINFORCE with leave-one-out rewards and sampled KL penalty','training_reward_mode':args.training_reward,'reward':f"Fraction of {manifest['tests_per_task']} sandboxed tests passed" if args.training_reward=='tests' else '0.5 exact-test fraction + 0.5 exact-field fraction; schema violations receive zero; evaluation uses exact tests','evaluation':'20 frozen specifications; greedy, same 1536-token budget before and after','selection':'Final fixed-step adapter only; no holdout checkpoint selection','source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     if args.resume:
         if json.loads((args.output/'protocol.json').read_text())!=protocol:raise ValueError('Resume protocol changed')
     else:write(args.output/'protocol.json',protocol)
@@ -118,9 +121,9 @@ def run(args):
         save('adapter');write(args.output/'training-completion.json',{'steps':step,**delta()})
         after=evaluate(model,tokenizer,heldout,args.output/'after','after')
         b=sum(r['result']['success'] for r in before);a=sum(r['result']['success'] for r in after)
-        write(args.output/'completion.json',{'before_success':b,'after_success':a,'heldout':20,'percentage_point_gain':(a-b)*5,'before_mean_reward':sum(r['result']['reward'] for r in before)/20,'after_mean_reward':sum(r['result']['reward'] for r in after)/20,'pairs':[{'id':x['id'],'before':x['result'],'after':y['result']} for x,y in zip(before,after,strict=True)],**delta()})
+        write(args.output/'completion.json',{'before_success':b,'after_success':a,'heldout':20,'percentage_point_gain':(a-b)*5,'before_mean_reward':sum(r['result']['reward'] for r in before)/20,'after_mean_reward':sum(r['result']['reward'] for r in after)/20,'before_mean_field_score':sum(r['result']['field_score'] for r in before)/20,'after_mean_field_score':sum(r['result']['field_score'] for r in after)/20,'pairs':[{'id':x['id'],'before':x['result'],'after':y['result']} for x,y in zip(before,after,strict=True)],**delta()})
     except BaseException as exc:
         write(args.output/'interruption.json',{'step':step,'error':str(exc)});raise
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--model',type=Path,required=True);p.add_argument('--steps',type=int,default=80);p.add_argument('--resume',type=Path);run(p.parse_args())
+    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--model',type=Path,required=True);p.add_argument('--steps',type=int,default=80);p.add_argument('--resume',type=Path);p.add_argument('--training-reward',choices=['tests','components'],default='tests');run(p.parse_args())

@@ -22,6 +22,7 @@ function renderCase(){
  const metric=active==='engineering'?'mean_gap_iou':'mean_reward';
  const metricName=active==='engineering'?'target geometry overlap':'test pass rate';
  if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
+ if(active==='coding'&&s.before?.mean_field_score!=null){$('run-detail').textContent+=` · Exact field accuracy: ${(100*s.before.mean_field_score).toFixed(1)}% → ${s.after?.mean_field_score!=null?(100*s.after.mean_field_score).toFixed(1)+'%'+(s.after.complete?'':` (${s.after.completed}/20, partial)`):'awaiting evaluation'}`}
  if(s.weight_update?.changed_parameters){$('run-detail').textContent+=` · ${s.weight_update.changed_parameters.toLocaleString()} adapter parameters changed`}
  const codeSample=s.sample;
  $('program-comparison').hidden=active!=='coding'||!codeSample;

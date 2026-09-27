@@ -57,3 +57,25 @@ witnesses stay with the dataset. Truncated or invalid responses are not accepted
 The resulting protocol has 24 private tests per program and is frozen before
 any before/after coding scores are collected. No test is selected using Qwen's
 held-out performance.
+
+## Recorded reward revision: code-002
+
+The strict-reward run `code-001` was preserved after eight optimizer batches.
+Seven groups had four zero rewards; one group contained a 1/24 test pass and
+produced the first update (917,504 changed adapter parameters). This was a sparse
+training signal. A diagnostic on two training programs found 4/96 and 1/96
+exactly correct output fields despite both failing every complete test.
+
+`code-002` starts afresh from the same pinned base and runs the full 80 batches.
+Its training reward is 0.5 × exact-test pass fraction + 0.5 × exact-field match
+fraction. A field is credited only when the returned object has exactly the
+required keys. Extra keys, missing keys, wrong types, nonfinite values, and
+forged envelopes do not receive credit. Reward one still requires every field
+of every test to match. Field credit is partial correctness, not program success.
+
+The 24-test suite, dataset split, runtime limit, generation settings, and strict
+held-out success criterion remain unchanged. Both baseline and final evaluation
+record exact-field accuracy as an additional metric while the primary score
+still requires all tests to pass. A fresh baseline is recorded for this run.
+The reward revision uses training-attempt evidence; held-out cases remain outside
+training, task generation, and checkpoint selection.

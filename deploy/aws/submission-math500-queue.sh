@@ -3,7 +3,7 @@ set -euo pipefail
 cd /home/ubuntu/AksharaForge-interactive
 while systemctl is-active --quiet aksharaforge-coding-queue.service; do sleep 30; done
 # This optional run cannot displace the required coding evaluation.
-test -f coding/runs/code-001/completion.json
+test -f coding/runs/code-002/completion.json
 if [ "$(date -u +%s)" -gt "$(date -u -d '2026-09-27 13:25:00' +%s)" ]; then
     /usr/bin/python3 -c 'import json;json.dump({"status":"not_started","reason":"Less than 100 minutes remain before the authorized deadline"},open("math500/queue-status.json","w"))'
     exit 0
