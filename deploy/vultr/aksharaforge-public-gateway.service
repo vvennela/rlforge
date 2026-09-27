@@ -1,0 +1,17 @@
+[Unit]
+Description=AksharaForge restricted judge frontend
+After=aksharaforge.service
+BindsTo=aksharaforge.service
+PartOf=aksharaforge.service
+
+[Service]
+User=aksharaforge
+Group=aksharaforge
+WorkingDirectory=/opt/aksharaforge
+Environment=PYTHONPATH=/opt/aksharaforge/src
+ExecStart=/opt/aksharaforge/.venv/bin/python -m akshara_forge.studio.public_gateway --session /run/aksharaforge-demo/session.json
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

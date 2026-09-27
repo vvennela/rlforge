@@ -1,0 +1,17 @@
+[Unit]
+Description=Password-gated AksharaForge NetBird demo session
+After=netbird.service aksharaforge-public-gateway.service
+Requires=netbird.service
+BindsTo=aksharaforge-public-gateway.service aksharaforge.service
+PartOf=aksharaforge.service
+
+[Service]
+Type=simple
+RuntimeDirectory=aksharaforge-demo
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/python3 /opt/aksharaforge/deploy/vultr/netbird-session.py
+RuntimeMaxSec=24h
+TimeoutStopSec=15
+KillMode=mixed
+Restart=no
+UMask=0077
