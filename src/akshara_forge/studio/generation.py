@@ -202,6 +202,13 @@ class GenerationJobs:
                                 accepted[row['id']]=row
                                 accepted_checks[row['id']]={**check,'review_evidence':str(Path('private/reviews')/call_folder.relative_to(folder)/'audit.json')}
                         (call_folder/'accepted-ids.json').write_text(json.dumps([r['id'] for r in batch if r['id'] in accepted]))
+                        # Preserve verified work even when a later provider response
+                        # exhausts the retry budget. This is private intermediate
+                        # evidence, never a partially released environment.
+                        progress={'requested':count,'completed':len(rows)+len(accepted),
+                            'problems':rows+[accepted[id] for id in batch_ids if id in accepted],
+                            'audits':audits,'pending_batch_reviews':accepted_checks}
+                        tmp=folder/'verified-progress.tmp';tmp.write_text(json.dumps(progress,indent=2));tmp.replace(folder/'verified-progress.json')
                     if len(accepted)==10:
                         rows.extend(accepted[id] for id in batch_ids)
                         audits.append({'method':'blind GLM solution cross-check plus adversarial verifier probes',

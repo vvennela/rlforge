@@ -237,6 +237,8 @@ def test_upload_keeps_validated_items_and_only_replaces_rejected_ones(tmp_path,m
     assert all(r['passed'] for a in published for r in a['problems'])
     assert published[0]['problems'][0]['review_evidence']=='private/reviews/calls/00/attempt-1/audit.json'
     assert published[0]['problems'][3]['review_evidence']=='private/reviews/calls/00/attempt-2/audit.json'
+    progress=json.loads((root/'verified-progress.json').read_text())
+    assert progress['completed']==20 and progress['problems']==rows
 
     for audit in published:
         for item in audit['problems']:
