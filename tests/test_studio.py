@@ -16,7 +16,8 @@ def test_generated_bundle_and_runtime(tmp_path,monkeypatch):
     monkeypatch.setenv('AKSHARA_GENERATOR_PROVIDER','openai');monkeypatch.setenv('OPENAI_API_KEY','test')
     monkeypatch.delenv('AKSHARA_INFERENCE_CONFIG',raising=False)
     counter=[0]
-    def provider(prompt,folder,*,system=g.SYSTEM):
+    def provider(prompt,folder,*,system=g.SYSTEM,json_prefix=False):
+        assert json_prefix is True
         if system!=g.SYSTEM:
             request=json.loads(prompt)
             return {'problems':[{'id':r['id'],'unambiguous':True,'reason':'Add one','source_quote':'Addition','reference_answer':int(r['prompt'].split()[1])+1,'attacks':[{'answer':a,'expected_accept':False,'reason':'Wrong value or type'} for a in [-1,-2,'wrong']]} for r in request['problems']]}

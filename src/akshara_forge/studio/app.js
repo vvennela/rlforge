@@ -53,7 +53,31 @@ for(const name of ['dragenter','dragover'])$('dropzone').addEventListener(name,e
 for(const name of ['dragleave','drop'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.remove('dragover')});
 $('dropzone').addEventListener('drop',e=>{choose(e.dataTransfer.files[0]);$('paper').required=false});
 function jobView(s){$('job').hidden=false;const titles={extracting:'Reading your document',ocr:'Reading scanned pages',artifacts:'Extracting source artifacts',generating:'Generating the environment',reviewing:'Testing adversarial answers',ready:'Your environment is ready',failed:'Generation stopped',awaiting_connection:'Document ready'};$('job-title').textContent=titles[s.status]||s.status;$('job-count').textContent=['ocr','artifacts'].includes(s.status)?`${s.ocr_completed||0} / ${s.ocr_total||0} pages`:`${s.completed||0} / ${s.count||100} problems`;$('job-progress').style.width=s.status==='ready'?'100%':(s.status==='ocr'?Math.max(3,25*(s.ocr_completed||0)/(s.ocr_total||1)):s.status==='artifacts'?25:Math.max(3,(s.ocr?25:0)+(s.ocr?75:100)*(s.completed||0)/(s.count||100)))+'%';$('job-message').textContent=s.message||(s.status==='ready'?'Source-linked problems, training splits, and an executable reward checker. Review the reference answers before training.':'Extracting source evidence and building checkable tasks.');$('download').hidden=!s.download;if(s.download){$('download').href=s.download;$('download').download='environment.zip'}if(s.ocr){$('ocr-result').hidden=false;$('ocr-pages').textContent=s.ocr.pages+' pages';$('ocr-strips').textContent=s.ocr.strips+' strips';$('ocr-artifacts').textContent=s.ocr.artifacts+' artifacts';$('ocr-method').textContent=Object.entries(s.ocr.methods).map(([k,v])=>(k==='tesseract'?'OCR':'Native text')+': '+v+' pages').join(' · ')+' · 200 DPI · source hashes recorded';$('ocr-download').href=s.ocr.download;if($('ocr-page').getAttribute('src')!==s.ocr.preview)$('ocr-page').src=s.ocr.preview}if(s.preview){$('job-preview').replaceChildren();for(const p of s.preview){const el=document.createElement('p');el.textContent=p.prompt;$('job-preview').append(el)}tex()}}
-$('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);jobView(s);while(['extracting','ocr','artifacts','generating','reviewing'].includes(s.status)){await new Promise(r=>setTimeout(r,1500));const poll=await fetch('/api/generation/'+s.id);if(!poll.ok)throw Error('Generation status unavailable');s=await poll.json();jobView(s)}}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
+function rememberJob(id){
+ const url=new URL(location.href);url.searchParams.set('environment',id);history.replaceState(null,'',url);
+}
+async function followJob(s){
+ jobView(s);
+ while(['extracting','ocr','artifacts','generating','reviewing'].includes(s.status)){
+  await new Promise(r=>setTimeout(r,1500));
+  const poll=await fetch('/api/generation/'+s.id);
+  if(!poll.ok)throw Error('Connection interrupted. Reload this page to resume the environment.');
+  s=await poll.json();jobView(s);
+ }
+}
+async function resumeJob(){
+ const id=new URLSearchParams(location.search).get('environment');
+ if(!id||!/^[a-f0-9]{32}$/.test(id))return;
+ $('generate').disabled=true;
+ try{
+  const response=await fetch('/api/generation/'+id);
+  if(!response.ok)throw Error('This environment could not be loaded.');
+  const s=await response.json();$('file-label').textContent=s.filename;$('count').value=String(s.count);
+  await followJob(s);
+ }catch(e){jobView({status:'failed',message:e.message})}
+ finally{$('generate').disabled=false}
+}
+$('upload-form').addEventListener('submit',async e=>{e.preventDefault();if(!selectedFile)return;if(selectedFile.size>8*1024*1024){jobView({status:'failed',message:'Upload a file up to 8 MB.'});return} $('generate').disabled=true;$('download').hidden=true;$('ocr-result').hidden=true;$('job-preview').replaceChildren();try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(selectedFile)});const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selectedFile.name,data,count:Number($('count').value)})});let s=await res.json();if(!res.ok)throw Error(s.error);rememberJob(s.id);await followJob(s)}catch(e){jobView({status:'failed',message:e.message})}finally{$('generate').disabled=false}});
 function drawBridge(){
  if(!renderer||!bridgeState||page!=='engineering')return;
  const samples=evidence.engineering?.samples||[evidence.engineering?.sample].filter(Boolean);
@@ -97,7 +121,7 @@ for(const n of ['pointerup','pointercancel','lostpointercapture'])$('bridge-init
 $('bridge-initial').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));drawBridge()},{passive:false});
 $('bridge-case').addEventListener('change',e=>{bridgeSelection=e.target.value;drawBridge()});
 $('reset-view').onclick=()=>{Object.assign(camera,{yaw:-.65,pitch:.55,zoom:1});drawBridge()};window.addEventListener('resize',drawBridge);
-refresh();initBridge();tex();setInterval(refresh,15000);
+refresh();initBridge();tex();resumeJob();setInterval(refresh,15000);
 
 let loadedModels=false;
 document.querySelector('.provider-settings').addEventListener('toggle',async e=>{if(!e.target.open||loadedModels)return;try{const r=await fetch('/api/models'),d=await r.json();if(!r.ok)throw Error(d.error);$('provider-model').replaceChildren(new Option('Choose a generation model',''));for(const m of d.models)$('provider-model').add(new Option(m.name,m.id));$('provider-model').value='glm-5.3';loadedModels=true}catch(e){$('connection-message').textContent=e.message}});

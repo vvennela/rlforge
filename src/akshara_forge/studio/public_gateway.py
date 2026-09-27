@@ -9,13 +9,14 @@ from urllib.parse import urlsplit
 import httpx
 
 ASSETS = re.compile(r'/studio/[A-Za-z0-9_./-]+\.(?:css|js|woff2?|ttf)$')
+ENVIRONMENT_PAGE = re.compile(r'/\?environment=[a-f0-9]{32}$')
 JOBS = re.compile(r'/api/generation/[a-f0-9]{32}(?:/(?:download|evidence|page/[1-9][0-9]*))?$')
 
 
 def permitted(method, path):
     if method == 'POST':
         return path in ('/api/generate', '/api/reset', '/api/step', '/api/agent')
-    return method == 'GET' and (path in ('/', '/workbench', '/api/state', '/drawing', '/drawing?task=bridge', '/drawing?task=car', '/drawing?task=turbine', '/api/studio', '/api/bridge-sample', '/renderer.js', '/viewer.js') or bool(ASSETS.fullmatch(path)) or bool(JOBS.fullmatch(path)))
+    return method == 'GET' and (path in ('/', '/workbench', '/api/state', '/drawing', '/drawing?task=bridge', '/drawing?task=car', '/drawing?task=turbine', '/api/studio', '/api/bridge-sample', '/renderer.js', '/viewer.js') or bool(ENVIRONMENT_PAGE.fullmatch(path)) or bool(ASSETS.fullmatch(path)) or bool(JOBS.fullmatch(path)))
 
 
 def trusted_request(host, origin, public_origin, method, upstream_host=None):
