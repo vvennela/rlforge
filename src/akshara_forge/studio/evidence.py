@@ -18,11 +18,15 @@ def snapshot(root):
         for line in events.read_text().splitlines():
             try:records.append(json.loads(line))
             except json.JSONDecodeError:pass
+    coding_launch=read(root/'runs/coding-training/launch.json') or {}
+    cr=root/'runs/coding-training/results'/coding_launch.get('run','code-001')
+    cb=read(cr/'before/summary.json');ca=read(cr/'after/summary.json');cd=read(cr/'completion.json')
+    ce=cr/'optimizer-events.jsonl';coding_steps=len(ce.read_text().splitlines()) if ce.exists() else 0
     def score(s,math=False):
         if not s:return None
-        return {'correct':s['correct'] if math else s['successes'],'completed':s['episodes'] if math else s['completed'],'total':20,'complete':s.get('complete',s.get('graded')==20)}
+        return {'correct':s['correct'] if math else s['successes'],'completed':s['episodes'] if math else s['completed'],'total':20,'complete':s.get('complete',s.get('graded')==20),'mean_reward':s.get('mean_reward'),'mean_gap_iou':s.get('mean_gap_iou')}
     return {'updated_at':time.time(),'model':'Qwen 2.5 · 7B parameters','math':{'before':score(before,True),'after':score(after,True),'steps':80,'status':'Evaluation complete' if after else 'Evaluation scheduled','source':'Optimization · augmented Lagrangian methods','protocol':'20 held-out problems · 10 exact-answer checks + 10 Astra-graded proofs','run':'curriculum-epoch-1'},
-      'coding':{'before':None,'after':None,'status':'Dataset ready','source':'Korf · iterative-deepening search','protocol':'20 held-out algorithm problems · exact structured-answer checks','run':None},
+      'coding':{'before':score(cb),'after':score(ca),'status':'Evaluation complete' if cd else 'Training' if coding_steps else 'Baseline evaluation' if cb else 'Queued after engineering' if coding_launch else 'Dataset ready','source':'Korf · executable IDA* implementations','protocol':'20 held-out Python specifications · 16 sandboxed tests each · same greedy decoding before/after','run':coding_launch.get('run'),'steps':coding_steps,'target_steps':coding_launch.get('steps',80)},
       'engineering':{'before':score(eb),'after':score(ea),'status':'Evaluation complete' if done else 'Training' if records else 'Baseline evaluation','steps':len(records),'target_steps':launch.get('long_steps',50),'reward_updates':records[-1]['reward_contrast_updates'] if records else 0,'source':'Bridge assembly · eight-turn upright repair','protocol':'20 held-out assemblies · identical tools and eight-turn budgets','run':launch.get('long_run','long-003')}}
 
 def main():

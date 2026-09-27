@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 let page='upload',active='math',evidence={},selectedFile=null,bridgeState=null,renderer=null,pointer=null;
 const camera={yaw:-.65,pitch:.55,zoom:1,panX:0,panY:0};
-const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Iterative-deepening search becomes a family of tasks. Check cost bounds, node visits, solution paths, and final answers against an exact verifier.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
+const cases={math:{kicker:'01 / MATHEMATICS',title:'Learn the method.\nSolve the next problem.',copy:'From augmented Lagrangians to checkable exercises. Train on paper-derived tasks, then evaluate on twenty held-out problems.'},coding:{kicker:'02 / CODING',title:'From an algorithm\nto an executable challenge.',copy:'Qwen writes Python implementations of iterative-deepening search. Each program runs against sixteen tests in a Vultr sandbox, checking paths, costs, thresholds, traversal order, and edge cases.'},engineering:{kicker:'03 / ENGINEERING',title:'Build. Inspect.\nMake the next move better.',copy:'An agent places, moves, and removes bricks. Every turn returns measured geometry, component coverage, and connection feedback.'}};
 function tex(){if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false});}
 function renderCase(){
  const c=cases[active],s=evidence[active]||{};
@@ -18,7 +18,10 @@ function renderCase(){
  $('delta-score').textContent=ready?`${s.after.correct>=s.before.correct?'+':''}${(s.after.correct-s.before.correct)*5}pp`:'—';
  $('delta-detail').textContent=ready?'held-out accuracy':'Awaiting paired evaluation';
  $('protocol').textContent=s.protocol||'20 held-out problems · fixed before/after evaluation';
- $('run-detail').textContent=active==='engineering'?`${s.steps||0} / ${s.target_steps||50} training batches · ${s.reward_updates||0} batches with reward contrast`:active==='math'?'80 training updates · Qwen 2.5 7B · same frozen completion parser':'Qwen 2.5 7B · 20 held-out problems prepared';
+ $('run-detail').textContent=active==='engineering'?`${s.steps||0} / ${s.target_steps||50} training batches · ${s.reward_updates||0} batches with reward contrast`:active==='math'?'80 training updates · Qwen 2.5 7B · same frozen completion parser':`${s.steps||0} / ${s.target_steps||80} training batches · four sampled programs per batch · Qwen 2.5 7B`;
+ const metric=active==='engineering'?'mean_gap_iou':'mean_reward';
+ const metricName=active==='engineering'?'target geometry overlap':'test pass rate';
+ if(active!=='math' && s.before?.[metric]!=null){$('run-detail').textContent+=` · Mean ${metricName}: ${(s.before[metric]*100).toFixed(1)}% → ${s.after?.[metric]!=null?(s.after[metric]*100).toFixed(1)+'%':'awaiting evaluation'}`}
  if(active==='engineering'){requestAnimationFrame(drawBridge)}
 }
 async function refresh(){try{const r=await fetch('/api/studio');if(!r.ok)throw Error('Status unavailable');const d=await r.json();evidence=d.evidence;const g=d.generation;document.querySelector('.provider-settings').hidden=g.can_configure===false;$('provider-label').textContent=g.provider==='vultr'?'Vultr Serverless Inference':'Astra · server-side inference';$('provider-status').textContent=g.configured?g.model:'Connect inference key';renderCase()}catch(e){$('provider-status').textContent=e.message}}
