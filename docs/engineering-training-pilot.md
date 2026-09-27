@@ -47,8 +47,9 @@ One seed and 20 cases provide preliminary evidence, not a reliable broad uplift
 claim.
 
 The reward API binds to loopback, requires a bearer token stored outside Git, and
-is reached over two SSH tunnels via the local controller. This prototype depends
-on those tunnels remaining alive. No inbound application port is exposed. The
+is reached over a direct AWS-to-Vultr SSH tunnel managed by systemd. Its SSH key
+is restricted to forwarding to the reward service. The laptop is not in the
+training reward path. No inbound application port is exposed. The
 GPU has a two-hour shutdown safeguard; checkpoints and traces should be copied
 before stopping it earlier on completion. The Vultr service remains the source of
 sandbox execution evidence.
@@ -58,3 +59,7 @@ Serve with the module's `serve` command and run training with
 `python -m akshara_forge.engineering.train_pilot --help`. Credentials, machine IDs,
 the frozen dataset, and run receipts live outside the repository under
 `../runs/engineering-training`.
+
+Transport failures preserve the interrupted adapter and run logs. Resume uses a
+full optimizer checkpoint with the frozen protocol and original baseline; any
+updates after that checkpoint are replayed and recorded in a resume receipt.

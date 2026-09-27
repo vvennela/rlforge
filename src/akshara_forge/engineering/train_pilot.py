@@ -50,8 +50,8 @@ def run(args):
     from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback, set_seed
     from trl import GRPOConfig, GRPOTrainer
     if not torch.cuda.is_available(): raise RuntimeError('CUDA required')
-    if args.output.exists(): raise ValueError('Use a fresh run directory')
-    args.output.mkdir(parents=True)
+    if args.output.exists() and not args.resume: raise ValueError('Use a fresh run directory')
+    args.output.mkdir(parents=True,exist_ok=bool(args.resume))
     manifest=json.loads((args.dataset/'manifest.json').read_text())
     for split,digest in manifest['sha256'].items():
         if hashlib.sha256((args.dataset/f'{split}.json').read_bytes()).hexdigest()!=digest: raise ValueError('Dataset hash mismatch')
@@ -59,17 +59,26 @@ def run(args):
     heldout=json.loads((args.dataset/'heldout.json').read_text())
     if {r['id'] for r in training}&{r['id'] for r in heldout}: raise ValueError('Split overlap')
     set_seed(20260927)
-    write(args.output/'protocol.json',{'model':str(args.model),'manifest':manifest,'optimizer_steps':args.steps,
+    protocol={'model':str(args.model),'manifest':manifest,'optimizer_steps':args.steps,
          'learning_rate':2e-5,'num_generations':4,'temperature':0.8,'max_completion_length':768,
          'lora_rank':8,'lora_alpha':16,'lora_modules':['q_proj','v_proj'],'precision':'bfloat16',
          'seed':20260927,'evaluation':'20 frozen held-out prompts, greedy decoding before and after, 768-token budget',
          'selection':'Final fixed-step checkpoint only; held-out scores do not select checkpoints',
          'source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-         'reward_execution':'Vultr CPU gVisor containers; loopback-only authenticated reward service over SSH tunnels'})
+         'reward_execution':'Vultr CPU gVisor containers; loopback-only authenticated reward service over SSH tunnels'}
+    if args.resume:
+        old=json.loads((args.output/'protocol.json').read_text())
+        if any(old[k]!=protocol[k] for k in protocol if k!='source_sha256'): raise ValueError('Resume protocol mismatch')
+        write(args.output/f'resume-{int(time.time())}.json',{'checkpoint':str(args.resume),'source_sha256':protocol['source_sha256'],
+              'reason':'Reward transport timeout; direct AWS-to-Vultr SSH tunnel replaces laptop relay. Frozen experiment settings preserved.'})
+    else: write(args.output/'protocol.json',protocol)
     tokenizer=AutoTokenizer.from_pretrained(args.model)
     tokenizer.pad_token=tokenizer.eos_token; tokenizer.padding_side='left'
     model=AutoModelForCausalLM.from_pretrained(args.model,torch_dtype=torch.bfloat16,attn_implementation='sdpa').to('cuda')
-    before=evaluate_model(model,tokenizer,heldout,args.output/'before','before',768)
+    if args.resume:
+        before=[json.loads(line) for line in (args.output/'before/episodes.jsonl').read_text().splitlines()]
+        if [r['id'] for r in before]!=[r['id'] for r in heldout]: raise ValueError('Incomplete or mismatched saved baseline')
+    else: before=evaluate_model(model,tokenizer,heldout,args.output/'before','before',768)
     lookup={r['id']:r for r in training}
     def reward(completions,problem_id,**kwargs):
         def one(item):
@@ -106,7 +115,8 @@ def run(args):
           train_dataset=Dataset.from_list([{'prompt':r['prompt'],'problem_id':r['id']} for r in training]),
           reward_funcs=reward,callbacks=[Evidence()],
           peft_config=LoraConfig(r=8,lora_alpha=16,lora_dropout=0.,target_modules=['q_proj','v_proj'],task_type='CAUSAL_LM'))
-    initial={n:p.detach().cpu().clone() for n,p in trainer.model.named_parameters() if p.requires_grad}
+    initial=(torch.load(args.output/'initial-adapter-tensors.pt',weights_only=True) if args.resume else
+             {n:p.detach().cpu().clone() for n,p in trainer.model.named_parameters() if p.requires_grad})
     def delta(model):
         changed=0; squares=0.; maximum=0.
         for name,p in model.named_parameters():
@@ -114,11 +124,11 @@ def run(args):
             d=p.detach().cpu().float()-initial[name].float()
             changed+=int(torch.count_nonzero(d)); squares+=float((d*d).sum()); maximum=max(maximum,float(d.abs().max()))
         return changed,squares**0.5,maximum
-    torch.save(initial,args.output/'initial-adapter-tensors.pt')
+    if not args.resume: torch.save(initial,args.output/'initial-adapter-tensors.pt')
     write(args.output/'trainable-parameters.json',{'parameters':sum(t.numel() for t in initial.values()),'tensors':len(initial)})
     started=time.time()
     try:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=str(args.resume) if args.resume else None)
         trainer.save_model(str(args.output/'adapter'))
         changed,l2,maximum=delta(trainer.model)
         write(args.output/'training-completion.json',{'optimizer_steps':trainer.state.global_step,'changed_parameter_elements':changed,
@@ -138,6 +148,7 @@ def run(args):
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--dataset',type=Path,required=True); p.add_argument('--output',type=Path,required=True)
     p.add_argument('--model',type=Path,required=True); p.add_argument('--steps',type=int,default=40)
+    p.add_argument('--resume',type=Path,help='Full optimizer checkpoint; preserve the original run and baseline')
     run(p.parse_args())
 
 
