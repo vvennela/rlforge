@@ -2,16 +2,18 @@
 set -euo pipefail
 cd /home/ubuntu/AksharaForge-interactive
 # This optional run cannot displace the required coding evaluation.
+# Use the remaining window when at least one hour remains; the 15:05 UTC
+# instance shutdown still applies, and incomplete benchmark scores stay partial.
 while [ ! -f coding/runs/code-002/completion.json ] || systemctl is-active --quiet aksharaforge-coding-queue.service; do
     # A recoverable coding interruption must not discard the benchmark queue.
-    if [ "$(date -u +%s)" -gt "$(date -u -d '2026-09-27 13:25:00' +%s)" ]; then
-        /usr/bin/python3 -c 'import json;json.dump({"status":"not_started","reason":"Coding did not finish with 100 minutes remaining before the authorized deadline"},open("math500/queue-status.json","w"))'
+    if [ "$(date -u +%s)" -gt "$(date -u -d '2026-09-27 14:05:00' +%s)" ]; then
+        /usr/bin/python3 -c 'import json;json.dump({"status":"not_started","reason":"Coding did not finish with 60 minutes remaining before the authorized deadline"},open("math500/queue-status.json","w"))'
         exit 0
     fi
     sleep 30
 done
-if [ "$(date -u +%s)" -gt "$(date -u -d '2026-09-27 13:25:00' +%s)" ]; then
-    /usr/bin/python3 -c 'import json;json.dump({"status":"not_started","reason":"Less than 100 minutes remain before the authorized deadline"},open("math500/queue-status.json","w"))'
+if [ "$(date -u +%s)" -gt "$(date -u -d '2026-09-27 14:05:00' +%s)" ]; then
+    /usr/bin/python3 -c 'import json;json.dump({"status":"not_started","reason":"Less than 60 minutes remain before the authorized deadline"},open("math500/queue-status.json","w"))'
     exit 0
 fi
 if [ -n "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader)" ]; then exit 1; fi
