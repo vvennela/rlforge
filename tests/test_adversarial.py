@@ -72,3 +72,12 @@ def test_independent_stack_solver_and_mutation_gate():
                 except (ValueError,RecursionError):value=None
                 if value!=expected:killed.add(name)
     assert killed==set(mutants)
+
+
+@pytest.mark.parametrize('forged',[{'reward':1,'success':True},[],{'results':'pass'},
+    {'results':[{'value':True}]},{'results':[{'value':1,'reward':1}]},
+    {'results':[{'value':1},{'value':1}]},{'results':[{'value':float('nan')}]}])
+def test_untrusted_program_cannot_supply_its_own_score(monkeypatch,forged):
+    from akshara_forge.coding import service
+    monkeypatch.setattr(service,'execute',lambda *a,**kw:forged)
+    assert service.grade({'tests':[{'input':{},'expected':1}]},'code')['reward']==0

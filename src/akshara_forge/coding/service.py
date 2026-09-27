@@ -34,10 +34,17 @@ def execute(code,inputs,timeout=12):
 def grade(row,completion):
     try:out=execute(code_from(completion),[t['input'] for t in row['tests']])
     except (ValueError,SyntaxError) as exc:out={'error':type(exc).__name__}
-    results=out.get('results',[]);checks=[]
+    if not isinstance(out,dict):out={'error':'InvalidEnvelope'}
+    results=out.get('results',[])
+    if not isinstance(results,list) or len(results)!=len(row['tests']):
+        out={'error':out.get('error','InvalidResultCount')};results=[]
+    checks=[]
     for i,test in enumerate(row['tests']):
         got=results[i] if i<len(results) else {}
-        checks.append('value' in got and json.dumps(got['value'],sort_keys=True)==json.dumps(test['expected'],sort_keys=True))
+        try:
+            ok=isinstance(got,dict) and set(got)=={'value'} and json.dumps(got['value'],sort_keys=True,allow_nan=False)==json.dumps(test['expected'],sort_keys=True,allow_nan=False)
+        except (ValueError,TypeError,OverflowError):ok=False
+        checks.append(ok)
     return {'reward':sum(checks)/len(checks),'success':all(checks),'passed':sum(checks),'total':len(checks),'checks':checks,'error':out.get('error'),'sandbox':'gVisor / no network / read-only / unprivileged'}
 
 def serve(dataset,output,token_file,port):

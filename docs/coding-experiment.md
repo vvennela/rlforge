@@ -35,3 +35,22 @@ combinations; it is not a general-purpose coding benchmark.
 Campaign deadline: 2026-09-27 15:05 UTC. LEGO training and its final evaluation run
 first; coding follows on the same A10G. Optional MATH-500 uses the fixed math
 adapter, with the existing frozen baseline protocol, only if time remains.
+
+## Adversarial suite revision
+
+Before the coding baseline, `coding.adversarial` builds a new immutable dataset
+from the original 80/20 split. GLM supplies eight additional graph inputs per
+split, with intended failure modes; it does not supply expected outputs. Two
+independently implemented IDA* solvers must agree on every returned field, and
+Dijkstra independently checks path costs. Input validation rejects inadmissible
+heuristics, invalid edge costs, and oversized graphs.
+
+A mutation gate rejects suites that let any of eight deliberately incorrect
+implementations survive in either split: inclusive cutoff, ignored heuristic,
+goal before cutoff, reversed traversal, wrong next bound, unit edge costs,
+global visited set, and discarded prior traces. Each GLM case must distinguish
+at least one mutation. Raw model responses, failure reasons, and mutation
+witnesses stay with the dataset. Truncated or invalid responses are not accepted.
+The resulting protocol has 24 private tests per program and is frozen before
+any before/after coding scores are collected. No test is selected using Qwen's
+held-out performance.
