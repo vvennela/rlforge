@@ -54,4 +54,4 @@ references. This numerical audit does not certify every explanatory source claim
 The demo route expires with its NetBird session. Its downloaded bundle SHA-256 is
 `c385439c5123730515bed3038c623a2ea2019a4e7b75619617eab090ea4dd219`.
 The bundle includes source evidence, accepted reviews, and the original batch
-audits, including rejected drafts. The local run archive preserves every raw call.
+audits, including rejected review results. The local run archive preserves every raw call.
