@@ -6,7 +6,7 @@ RLForge connects document extraction, task generation, sandboxed execution, rewa
 
 ## What we tested
 
-- **Mathematics:** After 80 training updates, Qwen improved from **2/20 to 5/20** on the same held-out paper-derived questions: **+15 percentage points**. Ten questions use exact-answer checks; ten use teacher-graded proofs.
+- **Mathematics:** After 80 updates, paper holdout accuracy rose **2/20 → 5/20 (+15pp)**, with ten exact-answer checks and ten teacher-graded proofs. MATH-500 scored **396/500 original; 395/500 math-trained**, on separate GPU runtimes.
 - **Engineering:** An eight-turn LEGO bridge environment returns feedback on geometry, collisions, and connectivity. After 50 batches, successful repairs rose **3/20 → 7/20 (+20pp)**; mean geometry overlap rose **36.7% → 71.1%**.
 - **Coding:** Qwen writes IDA* search implementations for execution in isolated containers. Its frozen suite includes GLM-generated adversarial cases, independent reference checks, and mutation testing. After 80 batches, full correctness stayed **0/20 → 0/20**; exact-field accuracy fell **2.36% → 0.42%**. This run produced no coding uplift.
 

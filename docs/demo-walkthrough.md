@@ -46,8 +46,10 @@ how new domains add tools and independent verifiers.
 - Gradients, adapter changes, sampled attempts, checkpoints, and fixed evaluation
   conditions are recorded. Parameter changes establish training happened;
   matched held-out scores establish behavioral improvement.
-- The original MATH-500 baseline used an L40S. An A10G result is labeled separately
-  unless a matched baseline is available. Benchmark questions never guide training.
+- MATH-500 completed at 396/500 (79.2%) for original Qwen on L40S and 395/500
+  (79.0%) for the math-trained adapter on A10G. Report them separately; this
+  experiment did not demonstrate external benchmark improvement. Benchmark
+  questions never guide training.
 
 ## Completed upload example
 

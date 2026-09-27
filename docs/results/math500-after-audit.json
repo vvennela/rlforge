@@ -1,0 +1,90 @@
+{
+  "verified": true,
+  "complete": true,
+  "summary": {
+    "completed": 500,
+    "expected": 500,
+    "complete": true,
+    "correct": 395,
+    "accuracy": 0.79,
+    "extraction_failures": 0,
+    "truncated": 4,
+    "generated_tokens": 295366,
+    "breakdown": {
+      "subject": {
+        "Precalculus": {
+          "completed": 56,
+          "correct": 39
+        },
+        "Intermediate Algebra": {
+          "completed": 97,
+          "correct": 60
+        },
+        "Algebra": {
+          "completed": 124,
+          "correct": 120
+        },
+        "Number Theory": {
+          "completed": 62,
+          "correct": 52
+        },
+        "Prealgebra": {
+          "completed": 82,
+          "correct": 73
+        },
+        "Geometry": {
+          "completed": 41,
+          "correct": 23
+        },
+        "Counting & Probability": {
+          "completed": 38,
+          "correct": 28
+        }
+      },
+      "level": {
+        "2": {
+          "completed": 90,
+          "correct": 84
+        },
+        "5": {
+          "completed": 134,
+          "correct": 75
+        },
+        "3": {
+          "completed": 105,
+          "correct": 95
+        },
+        "4": {
+          "completed": 128,
+          "correct": 99
+        },
+        "1": {
+          "completed": 43,
+          "correct": 42
+        }
+      }
+    },
+    "metric": "single greedy completion; Math-Verify final-answer correctness",
+    "target": "more than 10 percentage points absolute accuracy improvement"
+  },
+  "runtime": {
+    "base_commit": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "chat_template_sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "gpu": "NVIDIA A10G",
+    "cuda": "13.0"
+  },
+  "identity": {
+    "adapter_sha256": "77783a675d4abb84568de75b7bb5c2f3c2863e14a6af13aca1933fbdd39bdc61",
+    "adapter_config_sha256": "371051f68f8abb01b009906a6a1f14be69074651169a5fb27ba9b6ed979ffa31",
+    "model_config_sha256": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c"
+  },
+  "paired_gain_claimed": false,
+  "evidence_sha256": {
+    "protocol.json": "6119fe89e1e3d3335d12d5e75e8c123107d97ca8526accbe3049c319a05e8691",
+    "identity.json": "f144441739e603ccc571cd3313b9443a7d015f2fbc0f87445856a41628dcf910",
+    "runtime.json": "197162909a42df9446b2ae634af984f77ddd07229e6d56c02bb96b37fec11669",
+    "episodes.jsonl": "a7de60dd25c7fe3e0954655199ac29d62ed3dba8940ab743829bba514828c384",
+    "summary.json": "28e46472eed7e779b1ca250c0d2898de424f57dc5fee36657c7c7256b82ce30f",
+    "COMPLETE.json": "28e46472eed7e779b1ca250c0d2898de424f57dc5fee36657c7c7256b82ce30f"
+  }
+}

@@ -4,8 +4,9 @@ The original Qwen2.5-7B-Instruct baseline scored **396/500 (79.2%)** on an
 NVIDIA L40S. Its 500 saved responses were independently rescored with the pinned
 verifier and reproduced the recorded result exactly.
 
-The submission campaign evaluates the fixed, 80-step **math-trained adapter** on
-an NVIDIA A10G. It is separate from the coding and LEGO adapters. Its SHA-256 is
+The fixed, 80-step **math-trained adapter scored 395/500 (79.0%)** on an NVIDIA
+A10G. All 500 questions completed; four responses reached the token limit and
+none failed answer extraction. Rescoring every saved response reproduced this result. It is separate from the coding and LEGO adapters. Its SHA-256 is
 `77783a675d4abb84568de75b7bb5c2f3c2863e14a6af13aca1933fbdd39bdc61`, matching both the
 archived final math adapter and checkpoint 80. These experiments use curated pilot
 training tasks; upload-generated environments are a separate pipeline output.
@@ -41,3 +42,19 @@ fingerprints, frozen settings and prompts, question order, verifier versions,
 recomputed per-question scores, summary arithmetic, and the completion receipt.
 It defaults to requiring all 500 questions. Use `--allow-partial` only to audit an
 explicitly labeled snapshot of an incomplete run; that flag never marks it complete.
+
+## Final campaign result
+
+| Model | GPU | Correct | Accuracy | Questions evaluated |
+|---|---|---:|---:|---:|
+| Original Qwen 2.5 7B | L40S | 396 | 79.2% | 500 |
+| Math-trained Qwen 2.5 7B | A10G | 395 | 79.0% | 500 |
+
+The campaign did not demonstrate the requested external benchmark improvement.
+The paper-specific holdout remains a separate result: 2/20 → 5/20. The runtime
+mismatch prevents a matched causal claim about the one-question difference here.
+
+The [baseline audit](results/math500-before-audit.json) and
+[trained-model audit](results/math500-after-audit.json) include recomputed scores,
+runtime provenance, adapter identities, and evidence fingerprints. These public
+reports contain no benchmark prompts or reference answers.

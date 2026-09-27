@@ -1,0 +1,90 @@
+{
+  "verified": true,
+  "complete": true,
+  "summary": {
+    "completed": 500,
+    "expected": 500,
+    "complete": true,
+    "correct": 396,
+    "accuracy": 0.792,
+    "extraction_failures": 0,
+    "truncated": 4,
+    "generated_tokens": 298616,
+    "breakdown": {
+      "subject": {
+        "Precalculus": {
+          "completed": 56,
+          "correct": 41
+        },
+        "Intermediate Algebra": {
+          "completed": 97,
+          "correct": 61
+        },
+        "Algebra": {
+          "completed": 124,
+          "correct": 118
+        },
+        "Number Theory": {
+          "completed": 62,
+          "correct": 53
+        },
+        "Prealgebra": {
+          "completed": 82,
+          "correct": 72
+        },
+        "Geometry": {
+          "completed": 41,
+          "correct": 22
+        },
+        "Counting & Probability": {
+          "completed": 38,
+          "correct": 29
+        }
+      },
+      "level": {
+        "2": {
+          "completed": 90,
+          "correct": 84
+        },
+        "5": {
+          "completed": 134,
+          "correct": 75
+        },
+        "3": {
+          "completed": 105,
+          "correct": 94
+        },
+        "4": {
+          "completed": 128,
+          "correct": 101
+        },
+        "1": {
+          "completed": 43,
+          "correct": 42
+        }
+      }
+    },
+    "metric": "single greedy completion; Math-Verify final-answer correctness",
+    "target": "more than 10 percentage points absolute accuracy improvement"
+  },
+  "runtime": {
+    "base_commit": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "chat_template_sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "gpu": "NVIDIA L40S",
+    "cuda": "13.0"
+  },
+  "identity": {
+    "adapter_sha256": null,
+    "adapter_config_sha256": null,
+    "model_config_sha256": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c"
+  },
+  "paired_gain_claimed": false,
+  "evidence_sha256": {
+    "protocol.json": "6119fe89e1e3d3335d12d5e75e8c123107d97ca8526accbe3049c319a05e8691",
+    "identity.json": "f3d9aa669cdf2e359b93c9cc8907d08fee5e0b601753e2fd0c42701cdee78c21",
+    "runtime.json": "a198fae2ecd086c10cfd564696a13aa2bfe456f14dcce96e6463a957bbd21146",
+    "episodes.jsonl": "ef3a11d127288b52b67154e5319cf6a27a6bd2e5c81bd9354abd0a3896738c9d",
+    "summary.json": "c75ef5db1b544b425447f388b5704f6ef20f10fdd35ec344890373a5a903a59d",
+    "COMPLETE.json": "c75ef5db1b544b425447f388b5704f6ef20f10fdd35ec344890373a5a903a59d"
+  }
+}
