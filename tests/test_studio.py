@@ -123,7 +123,7 @@ def test_source_alignment_preserves_symbols_and_requires_unique_span():
     bind_quote(row,source)
     assert row['source_quote']==source
     assert row['source_quote_submitted']=='The rule is x = 1 + y.'
-    assert source[row['source_quote_alignment']['start']:row['source_quote_alignment']['end']]==row['source_quote']
+    assert source[row['source_quote_alignment']['start_char']:row['source_quote_alignment']['end_char']]==row['source_quote']
     with pytest.raises(ValueError):bind_quote({'source_quote':'The rule is x = 1 - y.'},source)
     with pytest.raises(ValueError,match='unique'):bind_quote({'source_quote':'a b'},'a\n b; a\t b')
 
@@ -151,3 +151,17 @@ def test_rejected_upload_batch_is_preserved_and_repaired_before_release(tmp_path
     rows=json.loads((root/'environment/private/problems.json').read_text())
     assert len(rows)==20 and all(r['source_quote']=='Addition' for r in rows)
     assert drafts[0]==3  # One rejected draft, then exactly two accepted batches.
+
+
+def test_source_ids_resolve_to_exact_preserved_passages():
+    from akshara_forge.studio.source import passages,bind_reference
+    source='A theorem with symbols x ≥ 2.\n'*120
+    parts=passages(source)
+    assert ''.join(p['text'] for p in parts)==source
+    row={'source_id':parts[1]['id']}
+    bind_reference(row,source)
+    span=row['source_quote_alignment']
+    assert row['source_quote']==source[span['start_char']:span['end_char']]
+    assert row['source_quote']==parts[1]['text']
+    with pytest.raises(ValueError,match='Unknown source_id'):
+        bind_reference({'source_id':'invented'},source)
